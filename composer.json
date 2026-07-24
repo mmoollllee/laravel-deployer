@@ -1,7 +1,6 @@
 {
     "name": "mmoollllee/laravel-deployer",
     "description": "Shared Deployer recipes for in-place Git deployment of Laravel apps on Plesk / managed hosting: DB-snapshot pull, storage sync, maintenance-safe deploy. Requires Deployer 8.",
-    "version": "0.1.0",
     "type": "library",
     "license": "MIT",
     "authors": [
@@ -13,5 +12,8 @@
     "require": {
         "php": ">=8.3",
         "deployer/deployer": "^8.0"
+    },
+    "suggest": {
+        "spatie/laravel-db-snapshots": "Required in the consuming app (local + remote) for the pull:db-refresh / pull:db-full tasks — provides the snapshot:* artisan commands."
     }
 }

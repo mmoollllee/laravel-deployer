@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.1 — 2026-07-24
+
+- Declare `spatie/laravel-db-snapshots` as a Composer `suggest` — the `pull:db-*`
+  tasks need the `snapshot:*` artisan commands in the consuming app (local +
+  remote), not in the recipe itself.
+- `pull:db-*` now assert those commands are available and fail with a clear
+  message otherwise.
+- Drop the `version` field from composer.json (inferred from the git tag).
+
 ## 0.1.0 — 2026-07-24
 
 Initial release.

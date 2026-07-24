@@ -1,8 +1,7 @@
 <?php
 
 /**
- * Database pull recipe: copy the remote database to local via snapshots
- * (mmoollllee/laravel-db-snapshots). Two entry points:
+ * Database pull recipe: copy the remote database to local via snapshots. Two entry points:
  *
  *   pull:db-refresh — only the tables listed in {{db_pull_include}}
  *   pull:db-full    — the whole database
@@ -10,11 +9,34 @@
  * Both leave local caches in a safe state (config:clear only). Sites that need
  * extra local fixups — e.g. rewriting tenant domains to *.test — hook a task
  * onto `after('pull:db-refresh', …)` and `after('pull:db-full', …)`.
+ *
+ * Requires the `snapshot:*` artisan commands (spatie/laravel-db-snapshots or a
+ * compatible fork) in the consuming app — remote (snapshot:create/cleanup) and
+ * local (snapshot:load). The recipe only shells out to them, so this is a
+ * Composer `suggest`, not a `require`; it is asserted at run time.
  */
 
 namespace Deployer;
 
 require_once __DIR__ . '/../lib/functions.php';
+
+/**
+ * Fail early with a clear message when the app is missing the snapshot:* commands
+ * that pull:db-* rely on (from spatie/laravel-db-snapshots or a compatible fork).
+ * Checks the remote app (snapshot:create/cleanup) and the local app
+ * (snapshot:load). Call after cd() into the remote app so the remote check runs
+ * in {{deploy_path}}.
+ */
+function assert_snapshots_available(): void
+{
+    if (trim(run('{{bin/php}} artisan help snapshot:create >/dev/null 2>&1 && echo snapshots-ok', nothrow: true)) !== 'snapshots-ok') {
+        throw new \RuntimeException('Remote app has no snapshot:* commands — add spatie/laravel-db-snapshots (or a compatible fork) to the project.');
+    }
+
+    if (trim(runLocally('php artisan help snapshot:load >/dev/null 2>&1 && echo snapshots-ok', nothrow: true)) !== 'snapshots-ok') {
+        throw new \RuntimeException('Local app has no snapshot:* commands — add spatie/laravel-db-snapshots (or a compatible fork) to the project.');
+    }
+}
 
 /**
  * Download the freshly created remote snapshot and load it into the local DB.
@@ -58,6 +80,7 @@ task('pull:db-refresh', function () {
     }
 
     cd('{{deploy_path}}');
+    assert_snapshots_available();
     run('{{bin/php}} artisan snapshot:create --table=' . implode(' --table=', $tables), ...long_running());
 
     pull_db_download_and_load(dropTables: false);
@@ -68,6 +91,7 @@ task('pull:db-refresh', function () {
 desc('Pull the full DB from remote → local (snapshot)');
 task('pull:db-full', function () {
     cd('{{deploy_path}}');
+    assert_snapshots_available();
     run('{{bin/php}} artisan snapshot:create', ...long_running());
 
     pull_db_download_and_load(dropTables: true);

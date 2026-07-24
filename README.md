@@ -3,15 +3,13 @@
 Shared [Deployer](https://deployer.org) recipes for the way these Laravel sites
 are hosted: a plain **in-place `git pull` deploy** on Plesk / managed hosting
 (no atomic releases), a **snapshot-based database pull** for local development,
-and **storage sync**. One place to maintain the deploy logic that used to live,
-copy-pasted, in every project's `deploy.php`.
+and **storage sync**.
 
 Requires **Deployer 8** (see [Deployer 8](#deployer-8)).
 
 ## Install
 
-Add the VCS repository and require the package (same pattern as the other
-`mmoollllee/*` packages). In each project's `composer.json`:
+Add the VCS repository and require the package. In each project's `composer.json`:
 
 ```json
 {
@@ -96,6 +94,11 @@ use the pinned binary too.
 `optimize`. Caching config locally would bake the dev-DB credentials into
 `bootstrap/cache/config.php`, after which a `RefreshDatabase` test run could hit
 and wipe the real local database.
+
+They also need the `snapshot:*` artisan commands (`spatie/laravel-db-snapshots`
+or a compatible fork) installed in the app **both locally and on the remote** —
+the recipe only shells out to them, so it is a Composer `suggest` rather than a
+hard dependency, and asserts their presence before running.
 
 ## First-time setup
 
