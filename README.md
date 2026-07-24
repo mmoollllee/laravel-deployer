@@ -10,13 +10,13 @@ Requires **Deployer 8** (see [Deployer 8](#deployer-8)).
 
 ## Install
 
-While the package is not yet on GitHub, wire it in as a local **path
-repository**. In each project's `composer.json`:
+Add the VCS repository and require the package (same pattern as the other
+`mmoollllee/*` packages). In each project's `composer.json`:
 
 ```json
 {
     "repositories": [
-        { "type": "path", "url": "/path/to/laravel-deployer", "options": { "symlink": true } }
+        { "type": "vcs", "url": "https://github.com/mmoollllee/laravel-deployer" }
     ],
     "require-dev": {
         "mmoollllee/laravel-deployer": "^0.1.0",
@@ -27,13 +27,6 @@ repository**. In each project's `composer.json`:
 
 ```bash
 composer update mmoollllee/laravel-deployer deployer/deployer --with-dependencies
-```
-
-Later, once pushed to GitHub, swap the path repo for a VCS repo (like the other
-`mmoollllee/*` packages) and tag `0.1.0`:
-
-```json
-{ "type": "vcs", "url": "https://github.com/mmoollllee/laravel-deployer" }
 ```
 
 ## Usage
