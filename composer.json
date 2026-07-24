@@ -1,0 +1,17 @@
+{
+    "name": "mmoollllee/laravel-deployer",
+    "description": "Shared Deployer recipes for in-place Git deployment of Laravel apps on Plesk / managed hosting: DB-snapshot pull, storage sync, maintenance-safe deploy. Requires Deployer 8.",
+    "version": "0.1.0",
+    "type": "library",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Moritz Graf",
+            "email": "info@moritz-graf.de"
+        }
+    ],
+    "require": {
+        "php": ">=8.3",
+        "deployer/deployer": "^8.0"
+    }
+}
