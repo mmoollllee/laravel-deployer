@@ -87,14 +87,61 @@ function deploy_update_code(): void
     run(git_pull_command());
 }
 
-/** Remote: install Composer dependencies for production. */
+/**
+ * Whether a shebang line hands the file to a PHP interpreter.
+ *
+ * Only the interpreter itself counts, never the rest of the line — the phpenv
+ * shim that motivated this lives under `~/.phpenv/shims/`, so a substring match
+ * on "php" would misread `#!/usr/bin/env bash` scripts sitting in a php-ish
+ * path. `env` is unwrapped so `#!/usr/bin/env php` resolves to `php`.
+ */
+function shebang_runs_php(string $shebang): bool
+{
+    if (! preg_match('/^#!\s*(\S+)(?:\s+(\S+))?/', $shebang, $matches)) {
+        return false;
+    }
+
+    $interpreter = basename($matches[1]);
+
+    if ($interpreter === 'env') {
+        $interpreter = basename($matches[2] ?? '');
+    }
+
+    // php, php8, php8.3, php-cgi — but not `bash`, `sh`, `python`.
+    return (bool) preg_match('/^php[\d.\-]*$/', $interpreter);
+}
+
+/**
+ * Remote: install Composer dependencies for production.
+ *
+ * {{bin/composer}} resolves how Composer must be invoked on this host (see
+ * recipe/base.php). The version probe in front is the guard that made this
+ * necessary: a misresolved binary can "succeed" with exit code 0 and install
+ * nothing, which leaves vendor/ silently stale for release after release.
+ */
 function deploy_vendors(): void
 {
     cd('{{deploy_path}}');
-    // `{{bin/php}} $(which composer)` pins Composer to the same PHP as the rest
-    // of the deploy — important on Plesk, where the default CLI `php` may be a
-    // different version than the site runs on.
-    run('{{bin/php}} $(which composer) install --no-dev --optimize-autoloader --no-interaction', ...long_running());
+    assert_composer_runnable();
+    run('{{bin/composer}} install --no-dev --optimize-autoloader --no-interaction', ...long_running());
+}
+
+/**
+ * Fail loudly when {{bin/composer}} does not actually execute Composer.
+ *
+ * @throws \RuntimeException when the command produces no Composer version banner
+ */
+function assert_composer_runnable(): void
+{
+    $output = trim(run('{{bin/composer}} --version 2>&1 || true'));
+
+    if (! str_contains($output, 'Composer version')) {
+        throw new \RuntimeException(
+            "`{{bin/composer}}` did not run Composer on the remote — vendor/ would be left untouched.\n".
+            "Got: ".(($output === '') ? '(no output)' : mb_substr($output, 0, 300))."\n".
+            "Set the correct command per host, e.g. ->set('bin/composer', '/usr/local/bin/composer')."
+        );
+    }
 }
 
 /** Remote: install locked npm dependencies and build front-end assets. */

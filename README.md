@@ -64,6 +64,7 @@ See [`examples/`](examples) for full templates.
 | Key                 | Default | Purpose |
 |---------------------|---------|---------|
 | `remote_php`        | `php`   | PHP binary for remote artisan/composer. Pin on Plesk, e.g. `/opt/plesk/php/8.3/bin/php`. |
+| `bin/composer`      | auto    | How to invoke Composer remotely. Auto-detected; override with a full path when detection fails. |
 | `git_ssh_key`       | `null`  | Deploy key for `git pull` (IdentitiesOnly=yes). `null` → bare `git pull`. |
 | `deploy_assets`     | `true`  | Run `npm ci && npm run build`. |
 | `deploy_migrate`    | `true`  | Run `artisan migrate --force`. |
@@ -76,6 +77,16 @@ See [`examples/`](examples) for full templates.
 
 `bin/php` is derived from `remote_php`, so Deployer's own Laravel-recipe tasks
 use the pinned binary too.
+
+`bin/composer` is resolved per host from `command -v composer`. Composer is
+normally a PHAR, so it gets prefixed with `{{bin/php}}` to run on the same
+interpreter as the rest of the deploy. Hosts that ship Composer as a *shell*
+wrapper instead — phpenv/Plesk installs `~/.phpenv/shims/composer` with a
+`#!/usr/bin/env bash` shebang — are detected and invoked directly, because
+handing a shell script to `php` prints it and exits 0, silently skipping the
+install. `deploy_vendors()` probes `composer --version` first and aborts the
+deploy if no version banner comes back, so a misresolved binary can never leave
+`vendor/` quietly stale.
 
 ## Tasks
 

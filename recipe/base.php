@@ -25,6 +25,37 @@ set('allow_anonymous_stats', false);
 set('remote_php', 'php');
 set('bin/php', fn () => get('remote_php'));
 
+/*
+ * The remote Composer command, PHP-pinned only when that is actually safe.
+ *
+ * Composer is usually a PHAR (`#!/usr/bin/env php`), so prefixing it with
+ * {{bin/php}} pins it to the same interpreter as the rest of the deploy —
+ * important on Plesk, where the default CLI `php` may be a different version
+ * than the site runs on.
+ *
+ * But some hosts expose Composer as a *shell* wrapper instead — phpenv/Plesk
+ * ships `~/.phpenv/shims/composer` with `#!/usr/bin/env bash`. Handing that to
+ * `php` makes PHP echo the script as plain text and exit 0: a silent no-op that
+ * leaves vendor/ stale while the deploy reports success. So the prefix is added
+ * only when the shebang really names a PHP interpreter; a wrapper is invoked
+ * directly and picks its own PHP.
+ */
+set('bin/composer', function (): string {
+    $composer = trim(run('command -v composer || true'));
+
+    if ($composer === '') {
+        throw new \RuntimeException(
+            'No `composer` found on the remote. Install it or set the full path via set(\'bin/composer\', ...).'
+        );
+    }
+
+    $shebang = trim(run('head -n 1 '.escapeshellarg($composer).' 2>/dev/null || true'));
+
+    return shebang_runs_php($shebang)
+        ? '{{bin/php}} '.$composer
+        : $composer;
+});
+
 // SSH key for `git pull` on the remote. null → bare `git pull` (~/.ssh/config).
 set('git_ssh_key', null);
 
