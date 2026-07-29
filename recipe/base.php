@@ -2,7 +2,8 @@
 
 /**
  * Base recipe: shared configuration, the tasks that are identical across every
- * site (storage sync, reset, first-time setup) and the default `deploy` task.
+ * site (storage sync, first-time setup) and the default `deploy` task. It also
+ * pulls in recipe/tasks.php and registers the `dep shell` command.
  *
  * Deployer's own `recipe/laravel.php` and `contrib/rsync.php` must be loaded
  * before this file — the entry recipes (app.php / signatur.php) take care of it.
@@ -10,7 +11,10 @@
 
 namespace Deployer;
 
+use Mmoollllee\LaravelDeployer\ShellCommand;
+
 require_once __DIR__ . '/../lib/functions.php';
+require_once __DIR__ . '/../lib/ShellCommand.php';
 
 /*
 |--------------------------------------------------------------------------
@@ -19,6 +23,16 @@ require_once __DIR__ . '/../lib/functions.php';
 */
 
 set('allow_anonymous_stats', false);
+
+/*
+ * In-place deploy: there is no releases/ directory and no `current` symlink, so
+ * everything Deployer resolves through {{current_path}} has to point at the
+ * webroot itself. Without this, `{{bin/artisan}}` expands to
+ * `{{deploy_path}}/current/artisan` and every `artisan:*` task from
+ * recipe/laravel.php — plus `dep run` and `logs:app` — misses the app.
+ */
+set('current_path', '{{deploy_path}}');
+set('release_or_current_path', '{{deploy_path}}');
 
 // PHP binary for every remote artisan/composer call. Plesk sites override this
 // per host, e.g. ->set('remote_php', '/opt/plesk/php/8.3/bin/php').
@@ -59,6 +73,10 @@ set('bin/composer', function (): string {
 // SSH key for `git pull` on the remote. null → bare `git pull` (~/.ssh/config).
 set('git_ssh_key', null);
 
+// Extra environment for `dep shell`, e.g. ['COMPOSER_MEMORY_LIMIT' => '-1'].
+// Values are exported inside double quotes, so `$VAR` is expanded on the server.
+set('shell_env', []);
+
 // Deploy toggles.
 set('deploy_assets', true);         // run `npm ci && npm run build`
 set('deploy_migrate', true);        // run `artisan migrate --force`
@@ -92,6 +110,16 @@ option('seed', null, \Symfony\Component\Console\Input\InputOption::VALUE_NONE, '
 */
 
 Deployer::get()->tasks->remove('deploy');
+
+/*
+ * `push` rsyncs the local working tree's uncommitted changes into
+ * {{current_path}} and marks it DIRTY_RELEASE. That was harmless while
+ * current_path pointed at a `current` symlink no in-place site has — now that it
+ * is the webroot, a mistyped `dep push` (for `push:files` / `push:auth`) would
+ * overwrite the live site from a dirty local checkout. Removing it makes the
+ * bare name ambiguous, so Deployer asks instead of picking one.
+ */
+Deployer::get()->tasks->remove('push');
 
 desc('Publish code on the remote (in-place git deploy)');
 task('deploy', function () {
@@ -142,19 +170,6 @@ task('push:files', function () {
 |--------------------------------------------------------------------------
 */
 
-desc('Reset the remote working copy (git reset --hard)');
-task('reset:hard', function () {
-    if (! askConfirmation('Run `git reset --hard` on the remote? Local server-side changes will be lost.', false)) {
-        writeln('<comment>Aborted.</comment>');
-
-        return;
-    }
-
-    cd('{{deploy_path}}');
-    run('git reset --hard');
-    writeln('<info>✓ git reset --hard.</info>');
-});
-
 desc('Upload the local auth.json to the remote (Composer credentials for private repos)');
 task('push:auth', function () {
     $auth = local_auth_json();
@@ -204,3 +219,34 @@ task('setup', function () {
 
 // Upload auth.json before setup so `composer install` can authenticate.
 before('setup', 'push:auth');
+
+/*
+|--------------------------------------------------------------------------
+| Everyday tasks
+|--------------------------------------------------------------------------
+*/
+
+require_once __DIR__ . '/tasks.php';
+
+/*
+|--------------------------------------------------------------------------
+| `dep shell` — interactive SSH into the webroot
+|--------------------------------------------------------------------------
+| A console command rather than a task, because tasks run in a worker
+| subprocess without a tty and could not hand the terminal to `ssh -t`.
+|
+| The name has to be `shell`, not `ssh`: Deployer registers its own commands in
+| Deployer::init(), which runs *after* this recipe is imported, so it would
+| overwrite anything we put under one of its own names.
+*/
+
+$console = Deployer::get()->getConsole();
+$command = new ShellCommand(Deployer::get());
+
+// Symfony Console renamed add() to addCommand() in 7.4 — the version Deployer 8
+// requires — but an older console pinned in the project would only have add().
+if (method_exists($console, 'addCommand')) {
+    $console->addCommand($command);
+} else {
+    $console->add($command);
+}

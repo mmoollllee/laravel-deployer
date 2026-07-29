@@ -74,9 +74,20 @@ See [`examples/`](examples) for full templates.
 | `files_pull_delete` | `true`  | Mirror on pull (`rsync --delete`). |
 | `db_pull_include`   | `[]`    | Tables for `pull:db-refresh`. |
 | `auth_json`         | `null`  | Local auth.json uploaded by `setup`/`push:auth`. `null` → auto-detect (`./auth.json`, then `~/.composer/auth.json`). |
+| `shell_env`         | `[]`    | Extra environment exported by `dep shell`. |
 
 `bin/php` is derived from `remote_php`, so Deployer's own Laravel-recipe tasks
 use the pinned binary too.
+
+`current_path` and `release_or_current_path` are pinned to `deploy_path`. An
+in-place deploy has no `releases/` directory and no `current` symlink, and
+without the pin everything Deployer resolves through them — `{{bin/artisan}}`,
+and with it every `artisan:*` task, plus `dep run` and `logs:app` — would look
+for the app in `{{deploy_path}}/current` and fail.
+
+Deployer's `push` task is removed for the same reason: it rsyncs the local
+working tree's uncommitted changes into `current_path`, which is now the live
+webroot. `push:files` and `push:auth` are unaffected.
 
 `bin/composer` is resolved per host from `command -v composer`. Composer is
 normally a PHAR, so it gets prefixed with `{{bin/php}}` to run on the same
@@ -88,18 +99,80 @@ install. `deploy_vendors()` probes `composer --version` first and aborts the
 deploy if no version banner comes back, so a misresolved binary can never leave
 `vendor/` quietly stale.
 
+## `dep shell`
+
+Opens an interactive SSH session **in the webroot, with the deploy environment
+already in place**:
+
+```bash
+dep shell
+```
+
+```
+→ example.com ~/example.com
+  git  ~/.ssh/example_ed25519 via $GIT_SSH_COMMAND
+  php  /opt/plesk/php/8.3/bin/php first on $PATH (also $DEP_PHP)
+```
+
+So a manual `git pull` on the server uses the deploy key without touching
+`~/.ssh/config`, and `php artisan …` runs on the version the site runs on
+instead of whatever the host's default CLI happens to be. Add per-site variables
+with `shell_env`:
+
+```php
+set('shell_env', ['COMPOSER_MEMORY_LIMIT' => '-1']);
+```
+
+Values are exported inside double quotes, so `$VAR` in a value is expanded on
+the server (that is how the `PATH` entry works).
+
+Deployer's built-in `dep ssh` also cd's into the webroot, but hands over a bare
+shell — no deploy key, no pinned PHP. The name `ssh` cannot be taken over from a
+recipe: Deployer registers its own commands in `Deployer::init()`, which runs
+after `deploy.php` is imported, so anything we put there would be overwritten.
+Hence `shell`.
+
 ## Tasks
+
+Everyday tasks — all of them run in `deploy_path`:
 
 | Task              | Description |
 |-------------------|-------------|
 | `deploy`          | In-place git deploy: pull, composer, assets, (clear + migrate), optimize. |
+| `deploy:quick`    | Code-only deploy: `git pull` + `optimize:clear` + `optimize`. For blade/config changes. |
+| `app:info`        | What is deployed: branch, commit, working-copy state, PHP, Laravel, `APP_ENV`/`APP_DEBUG`/`APP_URL`, pending migrations. |
+| `git:pull`        | `git pull` with `git_ssh_key`, nothing else. |
+| `git:fetch`       | `git fetch --prune`, then `git status`. |
+| `git:status`      | `git status --short --branch`. |
+| `git:log`         | Last commits (`--lines=N`, default 10). |
+| `git:reset-hard`  | `git reset --hard` (asks first). `reset:hard` is kept as an alias. |
+| `composer:install`| `composer install --no-dev --optimize-autoloader`. |
+| `composer:dump`   | `composer dump-autoload --optimize --no-dev`. |
+| `assets:build`    | `npm ci && npm run build`. |
+| `logs`            | Tail of the newest file matching `log_files` (`--lines=N`, default 100). |
+| `logs:tail`       | Follow it live (`--lines=N`, default 20; Ctrl-C to stop). |
+| `logs:clear`      | Truncate the log files (asks first). |
+
+Deploy and sync:
+
+| Task              | Description |
+|-------------------|-------------|
 | `pull:db-refresh` | Snapshot only the `db_pull_include` tables → local (keeps other local tables). |
 | `pull:db-full`    | Snapshot the whole DB → local. |
 | `pull:files`      | Download `files` from the server (mirror). |
 | `push:files`      | Upload `files` to the server (never deletes remotely). |
-| `reset:hard`      | `git reset --hard` on the server (asks first). |
 | `setup`           | Non-destructive first-time setup: uploads auth.json, `.env` (if missing), deps, key (if missing), storage-link, `migrate --force` (`--seed` opt-in), optimize. |
 | `push:auth`       | Upload the local auth.json (Composer credentials for private repos like filament-media-library-pro). |
+
+On top of these, Deployer's own Laravel recipe is loaded, so every `artisan:*`
+task comes along and works against the webroot — `dep artisan:optimize`,
+`artisan:migrate:status`, `artisan:route:list`, `artisan:down` / `artisan:up`,
+`artisan:queue:restart`, `artisan:horizon:*`, … (`dep list` shows them all).
+Anything else is a `dep run`:
+
+```bash
+dep run 'php artisan about'
+```
 
 `pull:db-*` load the dump locally and then run **`config:clear` only** — never
 `optimize`. Caching config locally would bake the dev-DB credentials into
@@ -154,8 +227,32 @@ after('pull:db-full', 'db:localize');
 
 Step helpers (all in the `Deployer` namespace):
 `deploy_update_code()`, `deploy_vendors()`, `deploy_assets()`, `deploy_clear()`,
-`deploy_migrate()`, `deploy_optimize()`, `deploy_standard()`,
-`long_running()`, `git_pull_command()`, `local_auth_json()`.
+`deploy_migrate()`, `deploy_optimize()`, `deploy_post_optimize()`,
+`deploy_standard()`, `long_running()`, `git_ssh_command()`, `git_env()`,
+`git_pull_command()`, `local_auth_json()`, `log_files_glob()`,
+`latest_log_file()`, `env_value()`, `option_lines()`, `write_raw()`,
+`write_line()`.
+
+`git_env()` returns `['GIT_SSH_COMMAND' => …]` for `run('git …', env: git_env())`.
+It is passed per command rather than through a global `set('env', …)` on
+purpose: a global `GIT_SSH_COMMAND` would also apply to `composer install`, and
+its `IdentitiesOnly=yes` would then block every other key when Composer clones a
+private dependency over SSH.
+
+Print remote output with `write_raw()`, never `writeln()`. Remote data passes
+two layers that read it as markup, and both bite:
+
+- `writeln()` parses `{{placeholders}}`, so a commit message or log line
+  containing `{{ … }}` — Blade source in a stack trace — aborts the task with
+  "config option does not exist".
+- Console style tags are rendered **twice**: the task runs in a worker
+  subprocess and Deployer's master re-emits the worker's stdout through its own
+  formatter. `<fg=…>` with an unknown colour in a log line kills the whole
+  command. `write_raw()` escapes *and* writes raw, so the escape survives the
+  worker and the master turns it back into a literal.
+
+`write_line()` is the same channel for lines you style yourself — the tags stay
+intact for the master, so any remote value in them must be escaped first.
 
 ## Deployer 8
 
@@ -172,8 +269,10 @@ composer global require deployer/deployer:^8.0
 ## Layout
 
 ```
-lib/functions.php     step helpers + long_running() + git_pull_command()
-recipe/base.php       config defaults, deploy, pull/push:files, push:auth, reset:hard, setup
+lib/functions.php     step helpers + long_running() + git env helpers
+lib/ShellCommand.php  the `dep shell` console command
+recipe/base.php       config defaults, deploy, pull/push:files, push:auth, setup
+recipe/tasks.php      git:*, composer:*, assets:build, logs*, app:info, deploy:quick
 recipe/database.php   pull:db-refresh, pull:db-full
 recipe/app.php        entry: Deployer laravel + rsync + base + database
 recipe/signatur.php   entry: Deployer laravel + rsync + base (no DB, no migrate)

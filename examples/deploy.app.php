@@ -28,6 +28,12 @@ set('files', [
     'storage/app/public/',
 ]);
 
+// Extra environment for `dep shell` (on top of GIT_SSH_COMMAND and the pinned
+// PHP binary, which are exported automatically).
+set('shell_env', [
+    'COMPOSER_MEMORY_LIMIT' => '-1',
+]);
+
 /*
 |--------------------------------------------------------------------------
 | Site-specific extras
