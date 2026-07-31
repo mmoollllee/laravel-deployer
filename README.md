@@ -75,6 +75,7 @@ See [`examples/`](examples) for full templates.
 | `db_pull_include`   | `[]`    | Tables for `pull:db-refresh`. |
 | `auth_json`         | `null`  | Local auth.json uploaded by `setup`/`push:auth`. `null` → auto-detect (`./auth.json`, then `~/.composer/auth.json`). |
 | `shell_env`         | `[]`    | Extra environment exported by `dep shell`. |
+| `shell_aliases`     | `['art' => '{{bin/php}} artisan']` | Shorthand commands available in `dep shell`. |
 
 `bin/php` is derived from `remote_php`, so Deployer's own Laravel-recipe tasks
 use the pinned binary too.
@@ -112,6 +113,7 @@ dep shell
 → example.com ~/example.com
   git  ~/.ssh/example_ed25519 via $GIT_SSH_COMMAND
   php  /opt/plesk/php/8.3/bin/php first on $PATH (also $DEP_PHP)
+  art  → /opt/plesk/php/8.3/bin/php artisan
 ```
 
 So a manual `git pull` on the server uses the deploy key without touching
@@ -125,6 +127,29 @@ set('shell_env', ['COMPOSER_MEMORY_LIMIT' => '-1']);
 
 Values are exported inside double quotes, so `$VAR` in a value is expanded on
 the server (that is how the `PATH` entry works).
+
+### Shorthands
+
+`art` stands in for `php artisan`, so `art migrate --force` and `art tinker`
+work straight from the prompt. Add your own — or drop the default with
+`set('shell_aliases', [])`:
+
+```php
+set('shell_aliases', [
+    'art' => '{{bin/php}} artisan',
+    'pest' => '{{bin/php}} vendor/bin/pest',
+]);
+```
+
+These are not shell aliases: an alias is a shell feature, not part of the
+environment, so there is nothing to export it in, and the interactive shell
+`dep shell` hands over reads only the host's own rc files. Each entry is instead
+written as a small executable in `~/.cache/dep-shell/bin`, which is prepended to
+`PATH` — same thing at the prompt, whatever login shell the host uses. The
+directory is rewritten on every `dep shell`, so a renamed entry leaves nothing
+behind. `{{placeholders}}` in a command are resolved before the file is written,
+which is why `art` keeps using the site's PHP even when a login profile pushes
+the `PATH` entry for `remote_php` back.
 
 Deployer's built-in `dep ssh` also cd's into the webroot, but hands over a bare
 shell — no deploy key, no pinned PHP. The name `ssh` cannot be taken over from a

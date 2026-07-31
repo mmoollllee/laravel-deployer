@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.0 — 2026-07-31
+
+- **`shell_aliases`** — shorthand commands for `dep shell`, defaulting to
+  `art` → `{{bin/php}} artisan`. Aliases cannot be exported (they are a shell
+  feature, and the session's `exec $SHELL -l` reads only the host's rc files), so
+  each entry is written as a small executable in `~/.cache/dep-shell/bin` and
+  that directory is prepended to `PATH`. Commands are resolved before they are
+  written, so `art` uses the site's PHP even when a login profile pushes the
+  `remote_php` `PATH` entry back. The directory is rewritten on every session,
+  so renamed entries leave nothing behind.
+
 ## 0.2.0 — 2026-07-29
 
 - **`dep shell`** — interactive SSH into `{{deploy_path}}` with the deploy

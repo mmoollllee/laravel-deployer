@@ -32,10 +32,17 @@ use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Question\ChoiceQuestion;
 
 use function Deployer\git_ssh_command;
+use function Deployer\parse;
 use function Deployer\quote;
 
 final class ShellCommand extends Command
 {
+    /**
+     * Remote directory holding the {{shell_aliases}} shims. Written unexpanded —
+     * $HOME is resolved by the remote shell, not here.
+     */
+    private const ALIAS_DIR = '$HOME/.cache/dep-shell/bin';
+
     public function __construct(private readonly Deployer $deployer)
     {
         parent::__construct('shell');
@@ -67,9 +74,10 @@ final class ShellCommand extends Command
             // session; let this one own its socket.
             $host->setSshMultiplexing(false);
 
-            $environment = $this->environment($host);
+            $aliases = $this->aliases($host);
+            $environment = $this->environment($host, $aliases);
 
-            $this->printBanner($output, $host, $environment);
+            $this->printBanner($output, $host, $environment, $aliases);
 
             $options = implode(' ', array_map(fn ($option) => quote($option), $host->connectionOptions()));
 
@@ -78,7 +86,7 @@ final class ShellCommand extends Command
                 'ssh -t %s %s %s',
                 $options,
                 $host->connectionString(),
-                escapeshellarg($this->remoteCommand($host, $environment)),
+                escapeshellarg($this->remoteCommand($host, $environment, $aliases)),
             ), $exitCode);
         } finally {
             Context::pop();
@@ -136,13 +144,49 @@ final class ShellCommand extends Command
     }
 
     /**
-     * Environment exported into the interactive shell.
+     * The {{shell_aliases}} map, name => command, with `{{placeholders}}`
+     * resolved — get() parses those in string values only, and this one is an
+     * array, so `{{bin/php}}` in a command would otherwise reach the server raw.
      *
      * @return array<string, string>
      */
-    private function environment(Host $host): array
+    private function aliases(Host $host): array
+    {
+        $aliases = [];
+
+        foreach ((array) $host->get('shell_aliases', []) as $name => $command) {
+            // As with shell_env, a list where a map was meant has to be caught
+            // here: set('shell_aliases', ['art']) would try to write a shim
+            // named "0" and hand the user an alias they never asked for.
+            // Command names are also file names, so `/` is out.
+            if (! is_string($name) || ! preg_match('/^[A-Za-z_][A-Za-z0-9_.-]*$/', (string) $name)) {
+                throw new \InvalidArgumentException(
+                    sprintf('shell_aliases: "%s" is not a usable command name — expected a name => command map.', (string) $name),
+                );
+            }
+
+            $command = trim(parse((string) $command));
+
+            if ($command === '') {
+                throw new \InvalidArgumentException(sprintf('shell_aliases: "%s" has an empty command.', $name));
+            }
+
+            $aliases[$name] = $command;
+        }
+
+        return $aliases;
+    }
+
+    /**
+     * Environment exported into the interactive shell.
+     *
+     * @param array<string, string> $aliases
+     * @return array<string, string>
+     */
+    private function environment(Host $host, array $aliases): array
     {
         $environment = [];
+        $path = [];
 
         $gitSsh = git_ssh_command();
 
@@ -150,16 +194,26 @@ final class ShellCommand extends Command
             $environment['GIT_SSH_COMMAND'] = $gitSsh;
         }
 
+        // Shims ahead of everything, so an alias shadows a same-named binary —
+        // which is what an alias does at the prompt.
+        if ($aliases !== []) {
+            $path[] = self::ALIAS_DIR;
+        }
+
         $php = (string) $host->get('remote_php', 'php');
 
         // Only a pinned path is worth exporting — a bare `php` is already on PATH.
         if (str_contains($php, '/')) {
-            // Put the pinned interpreter first on PATH so `php artisan …` and
-            // anything shelling out to `php` use the site's version. Keep the
-            // binary itself around too: a login profile that rewrites PATH
-            // (phpenv shims, for one) can still push our entry back.
-            $environment['PATH'] = dirname($php).':$PATH';
+            // Put the pinned interpreter on PATH so `php artisan …` and anything
+            // shelling out to `php` use the site's version. Keep the binary
+            // itself around too: a login profile that rewrites PATH (phpenv
+            // shims, for one) can still push our entry back.
+            $path[] = dirname($php);
             $environment['DEP_PHP'] = $php;
+        }
+
+        if ($path !== []) {
+            $environment['PATH'] = implode(':', $path).':$PATH';
         }
 
         foreach ((array) $host->get('shell_env', []) as $name => $value) {
@@ -184,14 +238,19 @@ final class ShellCommand extends Command
      * getting no session at all.
      *
      * @param array<string, string> $environment
+     * @param array<string, string> $aliases
      */
-    private function remoteCommand(Host $host, array $environment): string
+    private function remoteCommand(Host $host, array $environment, array $aliases): string
     {
         $deployPath = (string) $host->get('deploy_path', '~');
 
         // Unquoted on purpose: deploy_path is usually written as ~/example.com,
         // and the tilde has to be expanded by the remote shell.
         $lines = [sprintf('cd %s || echo "dep shell: %s not found, staying in $PWD" >&2', $deployPath, $deployPath)];
+
+        if ($aliases !== []) {
+            $lines[] = $this->installAliases($aliases);
+        }
 
         foreach ($environment as $name => $value) {
             // Double quotes, so `$VAR` in a shell_env value is expanded on the
@@ -209,9 +268,58 @@ final class ShellCommand extends Command
     }
 
     /**
-     * @param array<string, string> $environment
+     * The command that writes the {{shell_aliases}} shims.
+     *
+     * A real alias cannot be handed over: aliases are a shell feature, not part
+     * of the environment, so `export` has nothing to carry them in — and the
+     * `exec $SHELL -l` below starts a shell that reads only the host's own rc
+     * files. Injecting into those would mean per-shell hacks (bash --rcfile,
+     * zsh's ZDOTDIR) and giving up the login profile the host expects. A tiny
+     * executable early on PATH behaves the same at the prompt and does not care
+     * which shell the host hands over.
+     *
+     * @param array<string, string> $aliases
      */
-    private function printBanner(OutputInterface $output, Host $host, array $environment): void
+    private function installAliases(array $aliases): string
+    {
+        $dir = sprintf('"%s"', self::ALIAS_DIR);
+
+        // Wipe first: a shim for an alias that has since been renamed or dropped
+        // would otherwise stay on PATH for good. The glob sits outside the
+        // quotes so the remote shell expands it — and `rm -f` is happy when it
+        // matches nothing, e.g. on the very first session.
+        $steps = [sprintf('mkdir -p %s', $dir), sprintf('rm -f %s/*', $dir)];
+
+        foreach ($aliases as $name => $command) {
+            $file = sprintf('"%s/%s"', self::ALIAS_DIR, $name);
+
+            // printf, not a heredoc: this whole thing is one `;`-joined line.
+            // The command goes in an *argument*, never the format string, so a
+            // `%` in it stays a `%`.
+            $steps[] = sprintf(
+                'printf %s %s %s > %s',
+                escapeshellarg('%s\n'),
+                escapeshellarg('#!/bin/sh'),
+                escapeshellarg(sprintf('exec %s "$@"', $command)),
+                $file,
+            );
+            $steps[] = sprintf('chmod +x %s', $file);
+        }
+
+        // Guarded as a block instead of being folded into the outer chain: a
+        // read-only home should cost the aliases, not the session.
+        return sprintf(
+            '{ %s; } || echo "dep shell: could not write %s — aliases unavailable" >&2',
+            implode(' && ', $steps),
+            self::ALIAS_DIR,
+        );
+    }
+
+    /**
+     * @param array<string, string> $environment
+     * @param array<string, string> $aliases
+     */
+    private function printBanner(OutputInterface $output, Host $host, array $environment, array $aliases): void
     {
         $output->writeln(sprintf(
             '<info>→ %s</info> <comment>%s</comment>',
@@ -225,6 +333,12 @@ final class ShellCommand extends Command
 
         if (isset($environment['DEP_PHP'])) {
             $output->writeln(sprintf('  php  <comment>%s</comment> first on $PATH (also $DEP_PHP)', $environment['DEP_PHP']));
+        }
+
+        foreach ($aliases as $name => $command) {
+            // Padded to the width of the `git` / `php` labels above so short
+            // names line up with them; a longer one just runs past.
+            $output->writeln(sprintf('  %s  → <comment>%s</comment>', str_pad($name, 3), $command));
         }
     }
 }

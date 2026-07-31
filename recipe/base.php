@@ -77,6 +77,13 @@ set('git_ssh_key', null);
 // Values are exported inside double quotes, so `$VAR` is expanded on the server.
 set('shell_env', []);
 
+// Shorthand commands available in `dep shell`, as name => command. Each becomes
+// a small executable in a cache dir that is prepended to PATH — an alias is a
+// shell feature and cannot be exported into the session (see ShellCommand).
+// {{bin/php}} is resolved before the shim is written, so `art` runs on the
+// site's PHP even when a login profile pushes our PATH entry back.
+set('shell_aliases', ['art' => '{{bin/php}} artisan']);
+
 // Deploy toggles.
 set('deploy_assets', true);         // run `npm ci && npm run build`
 set('deploy_migrate', true);        // run `artisan migrate --force`

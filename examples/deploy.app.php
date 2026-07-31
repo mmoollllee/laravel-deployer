@@ -34,6 +34,12 @@ set('shell_env', [
     'COMPOSER_MEMORY_LIMIT' => '-1',
 ]);
 
+// Shorthands for `dep shell`. `art` is the default; listing it keeps it when
+// adding more. Set to [] to get a plain shell.
+set('shell_aliases', [
+    'art' => '{{bin/php}} artisan',
+]);
+
 /*
 |--------------------------------------------------------------------------
 | Site-specific extras
