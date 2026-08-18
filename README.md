@@ -16,8 +16,10 @@ Add the VCS repository and require the package. In each project's `composer.json
     "repositories": [
         { "type": "vcs", "url": "https://github.com/mmoollllee/laravel-deployer" }
     ],
+    "require": {
+        "mmoollllee/laravel-deployer": "^0.3.0"
+    },
     "require-dev": {
-        "mmoollllee/laravel-deployer": "^0.1.0",
         "deployer/deployer": "^8.0"
     }
 }
@@ -25,6 +27,28 @@ Add the VCS repository and require the package. In each project's `composer.json
 
 ```bash
 composer update mmoollllee/laravel-deployer deployer/deployer --with-dependencies
+```
+
+`require`, not `require-dev`: the package ships artisan commands (below) and one
+of them is a production diagnostic, which a dev-only package cannot be. It stays
+cheap there because `deployer/deployer` is only a `suggest` — list it in your own
+`require-dev` if you invoke `vendor/bin/dep` rather than a global Deployer 8.
+
+## Artisan commands
+
+Registered automatically by the package's service provider.
+
+| Command | Purpose |
+|---------|---------|
+| `app:localize-tenant-domains` | Appends `.test` to every tenant domain, so a production dump is reachable under Herd. Idempotent, and it refuses to run outside `local`/`testing` — it rewrites every domain there is, which on a server is the whole site. Multi-tenant apps only; it fails cleanly without a `tenants` table. |
+| `app:send-test-mail [recipient]` | Sends one mail through the configured mailer and prints the transport's own error on failure (an SMTP 535 is the point of it). Defaults to `MAIL_FROM_ADDRESS`. Meant for the server: `dep shell`, then `art app:send-test-mail`. |
+
+Hook the first one onto both DB pulls in the project's `deploy.php`:
+
+```php
+task('pull:localize-domains', fn () => runLocally('php artisan app:localize-tenant-domains'));
+after('pull:db-refresh', 'pull:localize-domains');
+after('pull:db-full', 'pull:localize-domains');
 ```
 
 ## Usage

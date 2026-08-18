@@ -1,6 +1,6 @@
 {
     "name": "mmoollllee/laravel-deployer",
-    "description": "Shared Deployer recipes for in-place Git deployment of Laravel apps on Plesk / managed hosting: DB-snapshot pull, storage sync, maintenance-safe deploy. Requires Deployer 8.",
+    "description": "Shared Deployer recipes for in-place Git deployment of Laravel apps on Plesk / managed hosting: DB-snapshot pull, storage sync, maintenance-safe deploy, plus the artisan commands the workflow leans on.",
     "type": "library",
     "license": "MIT",
     "authors": [
@@ -11,9 +11,44 @@
     ],
     "require": {
         "php": ">=8.3",
-        "deployer/deployer": "^8.0"
+        "illuminate/console": "^12.0|^13.0",
+        "illuminate/support": "^12.0|^13.0"
+    },
+    "require-dev": {
+        "deployer/deployer": "^8.0",
+        "orchestra/testbench": "^10.0",
+        "pestphp/pest": "^4.4",
+        "pestphp/pest-plugin-laravel": "^4.1"
     },
     "suggest": {
+        "deployer/deployer": "Required to RUN the recipes (^8.0). Only needed where `dep` is invoked — a globally installed Deployer 8 works too, which is why it is not a hard dependency: the package is required in production for its artisan commands, and a deploy tool has no business shipping there.",
         "spatie/laravel-db-snapshots": "Required in the consuming app (local + remote) for the pull:db-refresh / pull:db-full tasks — provides the snapshot:* artisan commands."
-    }
+    },
+    "autoload": {
+        "psr-4": {
+            "Mmoollllee\\LaravelDeployer\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Mmoollllee\\LaravelDeployer\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Mmoollllee\\LaravelDeployer\\LaravelDeployerServiceProvider"
+            ]
+        }
+    },
+    "scripts": {
+        "test": "@php vendor/bin/pest"
+    },
+    "config": {
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
 }

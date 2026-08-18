@@ -1,6 +1,20 @@
 # Changelog
 
-## 0.3.0 — 2026-07-31
+## 0.3.0 — 2026-08-18
+
+- **Artisan commands.** `app:localize-tenant-domains` (rewrites tenant domains to
+  `*.test` after a DB pull) and `app:send-test-mail` (SMTP diagnosis) move here
+  from the consuming apps, which had grown four near-identical copies between
+  them. Both keep their `app:` signature on purpose — they are named in every
+  project's `deploy.php` hooks, `.env.prod` comments and server runbooks, and a
+  cleaner `deploy:` prefix is not worth breaking those silently.
+
+  **Consumers must move the package from `require-dev` to `require`**:
+  `app:send-test-mail` is a production diagnostic, and a dev-only package does
+  not exist after `composer install --no-dev`. To keep that cheap,
+  `deployer/deployer` is no longer a hard dependency — it is a `suggest`, needed
+  only where `dep` actually runs, which is often a global install. Projects that
+  invoke `vendor/bin/dep` should list it in their own `require-dev`.
 
 - **`shell_aliases`** — shorthand commands for `dep shell`, defaulting to
   `art` → `{{bin/php}} artisan`. Aliases cannot be exported (they are a shell
