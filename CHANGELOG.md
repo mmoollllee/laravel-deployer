@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.0 — 2026-08-18
+## 0.4.0 — 2026-08-18
 
 - **Artisan commands.** `app:localize-tenant-domains` (rewrites tenant domains to
   `*.test` after a DB pull) and `app:send-test-mail` (SMTP diagnosis) move here
@@ -15,6 +15,8 @@
   `deployer/deployer` is no longer a hard dependency — it is a `suggest`, needed
   only where `dep` actually runs, which is often a global install. Projects that
   invoke `vendor/bin/dep` should list it in their own `require-dev`.
+
+## 0.3.0 — 2026-07-31
 
 - **`shell_aliases`** — shorthand commands for `dep shell`, defaulting to
   `art` → `{{bin/php}} artisan`. Aliases cannot be exported (they are a shell

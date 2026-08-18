@@ -17,7 +17,7 @@ Add the VCS repository and require the package. In each project's `composer.json
         { "type": "vcs", "url": "https://github.com/mmoollllee/laravel-deployer" }
     ],
     "require": {
-        "mmoollllee/laravel-deployer": "^0.3.0"
+        "mmoollllee/laravel-deployer": "^0.4.0"
     },
     "require-dev": {
         "deployer/deployer": "^8.0"
