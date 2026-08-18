@@ -16,6 +16,13 @@
   only where `dep` actually runs, which is often a global install. Projects that
   invoke `vendor/bin/dep` should list it in their own `require-dev`.
 
+  Needs a current Laravel 12: on **12.28** a package registering commands from
+  its service provider leaves `PackageDiscoverCommand` without its container
+  (`Call to a member function make() on null`), which aborts every
+  `composer install`. Fixed upstream — 12.55 and 12.67 were verified good, so
+  `composer update laravel/framework` is the remedy. The constraint stays `^12.0`
+  rather than guessing where in the 12.x line the fix actually landed.
+
 ## 0.3.0 — 2026-07-31
 
 - **`shell_aliases`** — shorthand commands for `dep shell`, defaulting to
