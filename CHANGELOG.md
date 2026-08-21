@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.4.1 — 2026-08-21
+
+- **Fix: `app:localize-tenant-domains` no longer assumes `primary_domain`.** It
+  probes `primary_domain`, then `domain`, and `--column=` names anything else.
+  0.4.0 hard-coded the column the CMS apps use, which turned the command into a
+  `Column not found: 1054` everywhere it is called `domain` — nest.kuckuck.cam
+  hooks it onto both DB pulls, so a freshly pulled production dump ended in a
+  query exception instead of reachable `*.test` domains. A tenants table with no
+  domain column at all (Filament workspaces, which have no domains) now fails
+  with a sentence rather than a stack trace.
+- **`--set=column=value`** sets one further column for every tenant, repeatable.
+  It exists for the per-tenant debug flag nest's own copy of the command used to
+  flip before it moved into the package — a locally imported dump wants it on,
+  since looking inside is the point of pulling it. `true`, `false` and `null` are
+  read as those values; an unknown column or a malformed pair aborts before the
+  first row is written.
+
 ## 0.4.0 — 2026-08-18
 
 - **Artisan commands.** `app:localize-tenant-domains` (rewrites tenant domains to

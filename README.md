@@ -40,7 +40,7 @@ Registered automatically by the package's service provider.
 
 | Command | Purpose |
 |---------|---------|
-| `app:localize-tenant-domains` | Appends `.test` to every tenant domain, so a production dump is reachable under Herd. Idempotent, and it refuses to run outside `local`/`testing` — it rewrites every domain there is, which on a server is the whole site. Multi-tenant apps only; it fails cleanly without a `tenants` table. |
+| `app:localize-tenant-domains` | Appends `.test` to every tenant domain, so a production dump is reachable under Herd. Idempotent, and it refuses to run outside `local`/`testing` — it rewrites every domain there is, which on a server is the whole site. Multi-tenant apps only; it fails cleanly without a `tenants` table or a domain column in it. |
 | `app:send-test-mail [recipient]` | Sends one mail through the configured mailer and prints the transport's own error on failure (an SMTP 535 is the point of it). Defaults to `MAIL_FROM_ADDRESS`. Meant for the server: `dep shell`, then `art app:send-test-mail`. |
 
 Hook the first one onto both DB pulls in the project's `deploy.php`:
@@ -50,6 +50,22 @@ task('pull:localize-domains', fn () => runLocally('php artisan app:localize-tena
 after('pull:db-refresh', 'pull:localize-domains');
 after('pull:db-full', 'pull:localize-domains');
 ```
+
+The domain column is found rather than assumed: `primary_domain` first, then
+`domain` — the apps built on this package disagree on the name, and neither of
+them should have to configure the common case. `--column=vanity_domain` picks a
+third name, and an unknown one aborts before a row is touched instead of
+surfacing as a query exception.
+
+`--set=column=value` forces one more column for **every** tenant, repeatable.
+The case it exists for is a per-tenant debug flag that a locally imported dump
+wants switched on — looking inside is the point of pulling it:
+
+```php
+runLocally('php artisan app:localize-tenant-domains --set=app_debug=1');
+```
+
+`true`, `false` and `null` are read as those values rather than as strings.
 
 ## Usage
 
