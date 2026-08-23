@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.4.2 — 2026-08-23
+
+- **`php artisan deploy`** — runs this project's Deployer task (`vendor/bin/dep`),
+  passing its output and exit code straight through, with no timeout of its own.
+  It exists to take the name: the consuming apps' own `deploy` command held the
+  SERVER-side routine (npm build, migrate, optimize, cache warm), and running
+  that from a developer machine is a silent misfire — it rebuilds the local
+  caches, prints success, and never reaches the server. That happened during a
+  nest.kuckuck.cam deploy; the command now answers instead, and refuses under
+  `APP_ENV=production` (where it would deploy the host onto itself) unless
+  `--force` is given. Missing `vendor/bin/dep` or `deploy.php` fail with a
+  sentence naming the fix.
+
+  **Consumers should delete their own `app/Console/Commands/Deploy.php`** — the
+  last registration wins, and the stale copy is the dangerous one.
+- `symfony/process` is now a declared dependency; the command uses it directly
+  instead of relying on it arriving through the framework.
+
 ## 0.4.1 — 2026-08-21
 
 - **Fix: `app:localize-tenant-domains` no longer assumes `primary_domain`.** It

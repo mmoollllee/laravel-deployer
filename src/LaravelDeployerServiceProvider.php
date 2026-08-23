@@ -3,6 +3,7 @@
 namespace Mmoollllee\LaravelDeployer;
 
 use Illuminate\Support\ServiceProvider;
+use Mmoollllee\LaravelDeployer\Commands\Deploy;
 use Mmoollllee\LaravelDeployer\Commands\LocalizeTenantDomains;
 use Mmoollllee\LaravelDeployer\Commands\SendTestMail;
 
@@ -15,6 +16,10 @@ use Mmoollllee\LaravelDeployer\Commands\SendTestMail;
  * package: they are named in every project's deploy.php hooks and .env.prod
  * comments, and on the servers themselves. A cleaner `deploy:` prefix is not
  * worth breaking a runbook nobody would think to update.
+ *
+ * `deploy` carries no prefix for the same reason, from the other side: it is the
+ * name the apps' own (now superfluous) deploy command had, and taking it is the
+ * point — see {@see Deploy}.
  */
 class LaravelDeployerServiceProvider extends ServiceProvider
 {
@@ -22,6 +27,7 @@ class LaravelDeployerServiceProvider extends ServiceProvider
     {
         if ($this->app->runningInConsole()) {
             $this->commands([
+                Deploy::class,
                 LocalizeTenantDomains::class,
                 SendTestMail::class,
             ]);

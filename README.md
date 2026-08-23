@@ -99,6 +99,25 @@ set('files', ['storage/app/public/']);
 
 See [`examples/`](examples) for full templates.
 
+### Running a deploy
+
+```bash
+php artisan deploy            # the deploy task from this project's deploy.php
+php artisan deploy pull:db    # any other task, same as `dep pull:db`
+vendor/bin/dep deploy         # Deployer directly — identical, minus the guards
+```
+
+`artisan deploy` is a thin wrapper around `vendor/bin/dep` and exists for one
+reason: apps used to ship a **local** `deploy` command that held the SERVER-side
+routine (npm build, migrate, optimize, cache warm). Run on a laptop it rebuilds
+the developer's own caches, reports success, and never touches the server. The
+package takes the name so that habit lands on the real deploy, and refuses to
+run with `APP_ENV=production` — where it would point the deploy at the host it
+is running on — unless you pass `--force`.
+
+**Delete the app's own `app/Console/Commands/Deploy.php`** when adopting this:
+whichever command registers last wins, and the stale one is the dangerous half.
+
 ## Configuration
 
 | Key                 | Default | Purpose |
