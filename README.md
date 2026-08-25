@@ -268,6 +268,30 @@ or a compatible fork) installed in the app **both locally and on the remote** �
 the recipe only shells out to them, so it is a Composer `suggest` rather than a
 hard dependency, and asserts their presence before running.
 
+### Where a pull lands locally
+
+The pull tasks create their local destination before rsyncing into it, so a
+clone that has never pulled works the same as one that has. Nothing to set up.
+
+What the app still owns is keeping the pulled data **out of git**. Both targets
+are content, not code — a production database dump and the uploaded media — and
+neither belongs in the repository. Use Laravel's own per-directory idiom
+(`bootstrap/cache/.gitignore` is the same pattern) rather than a root entry:
+
+```
+# database/dumps/.gitignore
+*
+!.gitignore
+```
+
+A root-level `/database/dumps` looks equivalent and is not: git does not descend
+into a directory excluded at the parent level, so a `.gitignore` or `.gitkeep`
+placed inside one can never be committed. If a project has that line, drop it
+when adding the file above.
+
+Sites with their own download task — an October CMS theme pull, say — should
+call `ensure_local_dir()` the same way `pull:files` does.
+
 ## First-time setup
 
 On a fresh remote (repo already cloned — e.g. by Plesk git or by hand), bootstrap

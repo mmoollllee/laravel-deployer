@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.4.3 — 2026-08-25
+
+- **Fix: `pull:db-*` and `pull:files` create their local destination.** Deployer's
+  `download()` is a bare `rsync -azP` with no `--mkpath`, and rsync creates at
+  most the *last* segment of a destination path — a file destination whose parent
+  is missing fails outright. Every path these tasks write to is git-ignored by
+  design, so a fresh clone has no reason to contain it, and the first pull on a
+  new machine died on `change_dir "…/database/dumps" failed: No such file or
+  directory (2)`. `pull:files` failed the same way one level deeper, on nested
+  targets such as `storage/app/captures/<site>/`.
+
+  The seven apps pulling a database had papered over this three different ways —
+  a committed `.gitkeep` here, a root `.gitignore` entry there, nothing at all in
+  two of them — and only where someone had already hit it. The new
+  `ensure_local_dir()` helper runs before each download, so none of that is load-
+  bearing any more; sites with their own download task should call it too.
+- README: the per-directory `.gitignore` convention for `database/dumps`,
+  including why a root-level `/database/dumps` entry defeats it.
+
 ## 0.4.2 — 2026-08-23
 
 - **`php artisan deploy`** — runs this project's Deployer task (`vendor/bin/dep`),

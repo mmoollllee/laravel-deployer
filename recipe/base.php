@@ -154,6 +154,10 @@ task('pull:files', function () {
         // Trailing slashes so rsync mirrors the folder's contents instead of
         // nesting it (…/storage → ./storage, not ./storage/storage).
         $path = rtrim($folder, '/').'/';
+        // Storage folders are git-ignored, and rsync creates at most the last
+        // segment of the destination — so a nested target such as
+        // storage/app/captures/<site>/ needs the tree below it to exist first.
+        ensure_local_dir($path);
         download("{{deploy_path}}/{$path}", $path, $options);
     }
 

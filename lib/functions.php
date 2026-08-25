@@ -173,6 +173,39 @@ function local_auth_json(): ?string
 }
 
 /**
+ * Create a local directory that a pull is about to rsync into.
+ *
+ * Deployer's download() is a bare `rsync -azP` with no `--mkpath`, and rsync
+ * only ever creates the *last* segment of a destination path: a file
+ * destination whose parent is missing fails outright, a directory destination
+ * two levels deep fails the same way. Every path the pull tasks write to is
+ * git-ignored by design — database dumps, uploaded media — so a fresh clone has
+ * no reason to contain it, and the first pull on a new machine died on
+ *
+ *     rsync: [Receiver] change_dir#3 "…/database/dumps" failed:
+ *            No such file or directory (2)
+ *
+ * Consumers used to paper over this with a committed `.gitkeep`, inconsistently
+ * and only where someone had already hit it. Creating the directory here means a
+ * pull works on a clone that has never seen one.
+ */
+function ensure_local_dir(string $dir): void
+{
+    $dir = rtrim($dir, '/');
+
+    // dirname() of a bare filename; nothing to create.
+    if ($dir === '' || $dir === '.') {
+        return;
+    }
+
+    if (is_dir($dir)) {
+        return;
+    }
+
+    runLocally('mkdir -p ' . escapeshellarg($dir));
+}
+
+/**
  * Remote: pull the latest code via git.
  *
  * @return string the `git pull` output, so a task can show it
