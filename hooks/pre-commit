@@ -1,0 +1,80 @@
+#!/bin/sh
+#
+# Refuse to commit database dumps.
+#
+# Installed by `php artisan app:install-git-hooks` (mmoollllee/laravel-deployer).
+# Re-run that command to refresh this file; local edits are kept unless you pass
+# --force.
+#
+# `dep pull:db-full` / `pull:db-refresh` pull a PRODUCTION snapshot into the
+# local repository. Those dumps must never enter git — history is forever and a
+# pushed dump cannot be taken back.
+#
+# The dump directory may or may not be gitignored (the README describes both
+# approaches); this hook is the backstop either way, and it is the ONLY
+# protection when the directory is left visible on purpose so that a forgotten
+# dump keeps showing up in `git status`.
+#
+# FAILS CLOSED. Every path that cannot reach a verdict — git erroring, awk
+# missing, a file name this script cannot parse — refuses the commit rather than
+# waving it through. A guard whose failure mode is "production data in history
+# forever" does not get to be optimistic.
+#
+# Bypass for a single commit with `git commit --no-verify`.
+
+# The snapshot disk's directory, resolved when the hook was installed. May be
+# empty when the app has no local snapshot disk; the extension rules below still
+# apply.
+dump_dir='__DUMP_DIR__'
+
+# `core.quotePath=false` stops git from C-quoting non-ASCII bytes, which is what
+# a German dump name would hit. Paths containing a quote, a backslash or a
+# control character are STILL quoted — git has no option for those — so they are
+# detected below and refused rather than silently mismatched.
+#
+# `--no-renames` so a rename reports as a delete plus an ADD rather than an R —
+# the dump is still caught, and git skips inexact-rename similarity scoring,
+# which is what makes hooks feel like they hang on a large commit.
+if ! staged=$(git -c core.quotePath=false diff --cached --no-renames --name-only --diff-filter=AC); then
+    echo "pre-commit: could not read the staged file list — refusing to commit." >&2
+    exit 1
+fi
+
+[ -z "$staged" ] && exit 0
+
+if ! offenders=$(printf '%s\n' "$staged" | awk -v dir="$dump_dir" '
+    # A path git had to quote: this script cannot compare it reliably, and
+    # guessing is how a dump slips through. Report it and fail at the end.
+    /^"/ { print > "/dev/stderr"; unparseable = 1; next }
+
+    # Anything inside the snapshot directory. The two dotfiles that configure
+    # the directory itself are not dumps and must stay committable.
+    dir != "" && index($0, dir "/") == 1 {
+        base = substr($0, length(dir) + 2)
+        if (base != ".gitkeep" && base != ".gitignore") { print }
+        next
+    }
+
+    # And a dump anywhere else in the tree, whatever it is called. Compared
+    # lower-cased: APFS is case-insensitive, so BACKUP.SQL and backup.sql are
+    # the same file.
+    tolower($0) ~ /\.(sql|dump|sqlite|sqlite3|mysql|pgsql)$|\.(sql|dump)\.(gz|bz2|xz|zst|zip)$/ { print }
+
+    END { if (unparseable) { exit 2 } }
+'); then
+    echo "pre-commit: staged path(s) could not be parsed (shown above) — refusing to commit." >&2
+    echo "Rename them, or use git commit --no-verify if you are sure." >&2
+    exit 1
+fi
+
+[ -z "$offenders" ] && exit 0
+
+echo "pre-commit: refusing to commit database dumps." >&2
+echo >&2
+printf '%s\n' "$offenders" | sed 's/^/  /' >&2
+echo >&2
+echo "These hold production data. Unstage them:" >&2
+echo "    git restore --staged <file>" >&2
+echo "and delete them once you no longer need them." >&2
+
+exit 1

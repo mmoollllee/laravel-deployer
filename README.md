@@ -42,6 +42,38 @@ Registered automatically by the package's service provider.
 |---------|---------|
 | `app:localize-tenant-domains` | Appends `.test` to every tenant domain, so a production dump is reachable under Herd. Idempotent, and it refuses to run outside `local`/`testing` — it rewrites every domain there is, which on a server is the whole site. Multi-tenant apps only; it fails cleanly without a `tenants` table or a domain column in it. |
 | `app:send-test-mail [recipient]` | Sends one mail through the configured mailer and prints the transport's own error on failure (an SMTP 535 is the point of it). Defaults to `MAIL_FROM_ADDRESS`. Meant for the server: `dep shell`, then `art app:send-test-mail`. |
+| `app:install-git-hooks [--force]` | Installs `.githooks/pre-commit` and points `core.hooksPath` at it. The hook refuses to commit database dumps — see below. Idempotent; a hand-edited hook is left alone unless `--force`. |
+
+### Keeping production dumps out of git
+
+`pull:db-full` and `pull:db-refresh` drop a **production** snapshot into the working
+tree. History is forever and a pushed dump cannot be taken back, so run this once per
+clone:
+
+```bash
+php artisan app:install-git-hooks
+```
+
+There are two ways to keep the dumps out, and the hook backs up **both**:
+
+- **Gitignore the directory** (below) — the dump never appears in `git status` and cannot
+  be added. Nothing to remember, but nothing reminds you to delete it either.
+- **Leave it visible** — the dump shows up in `git status` until you delete it. That
+  visibility is what makes `git add -A` dangerous, which is why the hook exists.
+
+The hook refuses any staged file inside the snapshot disk's directory (resolved from
+`db-snapshots.disk` at install time; the directory's own `.gitkeep`/`.gitignore` are
+allowed through) as well as `*.sql`, `*.dump`, `*.sqlite` and their `.gz`/`.bz2`/`.xz`/
+`.zst`/`.zip` forms anywhere in the tree, matched case-insensitively. Renames count too,
+so moving a dump does not get it past.
+
+It **fails closed**: if git errors, `awk` is missing, or a file name is one git has to
+quote and the hook cannot compare reliably, the commit is refused rather than allowed
+through unchecked.
+
+`core.hooksPath` is per-clone git config and cannot be committed, which is why this is a
+command rather than something the package can simply ship. `git commit --no-verify`
+bypasses the hook: it is a guard rail, not a lock.
 
 Hook the first one onto both DB pulls in the project's `deploy.php`:
 
@@ -275,8 +307,9 @@ clone that has never pulled works the same as one that has. Nothing to set up.
 
 What the app still owns is keeping the pulled data **out of git**. Both targets
 are content, not code — a production database dump and the uploaded media — and
-neither belongs in the repository. Use Laravel's own per-directory idiom
-(`bootstrap/cache/.gitignore` is the same pattern) rather than a root entry:
+neither belongs in the repository. One option is Laravel's own per-directory idiom
+(`bootstrap/cache/.gitignore` is the same pattern) rather than a root entry — the other
+is to leave the dumps visible and rely on the pre-commit hook above:
 
 ```
 # database/dumps/.gitignore

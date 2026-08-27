@@ -50,8 +50,9 @@ function pull_db_download_and_load(bool $dropTables): void
     // Newest dump the remote just wrote.
     $remote = run('ls -1t {{deploy_path}}/database/dumps | head -n1');
 
-    // The local dumps directory is git-ignored, so a fresh clone does not have
-    // it and rsync refuses to write a file into a directory that is not there.
+    // A fresh clone may not have the local dumps directory — whether it is
+    // gitignored or merely empty — and rsync refuses to write a file into a
+    // directory that is not there.
     ensure_local_dir('database/dumps');
 
     download("{{deploy_path}}/database/dumps/{$remote}", "database/dumps/{$remote}");
