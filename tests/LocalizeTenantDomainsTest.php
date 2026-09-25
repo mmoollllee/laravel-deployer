@@ -1,5 +1,6 @@
 <?php
 
+use Illuminate\Database\QueryException;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -154,6 +155,48 @@ it('refuses a mapping that would give two tenants the same domain', function () 
 
     expect(DB::table('tenants')->where('id', $staging)->value('primary_domain'))->toBe('vorschau.example.de')
         ->and(DB::table('tenants')->where('id', $live)->value('primary_domain'))->toBe('example.de');
+});
+
+it('keeps a map target on the next run, whatever its suffix', function () {
+    makeTenantsTable();
+
+    $staging = DB::table('tenants')->insertGetId(['primary_domain' => 'vorschau.example.de']);
+    $live = DB::table('tenants')->insertGetId(['primary_domain' => 'example.de']);
+
+    $map = ['--map' => ['vorschau.example.de=example.localhost', 'example.de=www.example.de.test']];
+
+    $this->artisan('app:localize-tenant-domains', $map)->assertSuccessful();
+    $this->artisan('app:localize-tenant-domains', $map)->assertSuccessful();
+
+    expect(DB::table('tenants')->where('id', $staging)->value('primary_domain'))->toBe('example.localhost')
+        ->and(DB::table('tenants')->where('id', $live)->value('primary_domain'))->toBe('www.example.de.test');
+});
+
+it('reads domains without regard to case, as DNS and the unique index do', function () {
+    makeTenantsTable();
+
+    $shouting = DB::table('tenants')->insertGetId(['primary_domain' => 'SIBLING.TEST']);
+
+    $this->artisan('app:localize-tenant-domains', ['--map' => ['Vorschau.Example.de=Example.de.test']])->assertSuccessful();
+
+    expect(DB::table('tenants')->where('id', $shouting)->value('primary_domain'))->toBe('sibling.test');
+
+    // Two domains that differ in case only are one domain to the unique index.
+    DB::table('tenants')->insert([['primary_domain' => 'vorschau.example.de'], ['primary_domain' => 'Example.de']]);
+
+    $this->artisan('app:localize-tenant-domains', ['--map' => ['vorschau.example.de=example.de.test']])->assertFailed();
+});
+
+it('rewrites all domains or none', function () {
+    // A constraint the clash check cannot know about fails the second update.
+    DB::statement("create table tenants (id integer primary key autoincrement, primary_domain varchar(255) null check (primary_domain <> 'boom.test'))");
+
+    $first = DB::table('tenants')->insertGetId(['primary_domain' => 'example.com']);
+    DB::table('tenants')->insert(['primary_domain' => 'boom']);
+
+    expect(fn () => $this->artisan('app:localize-tenant-domains')->run())->toThrow(QueryException::class);
+
+    expect(DB::table('tenants')->where('id', $first)->value('primary_domain'))->toBe('example.com');
 });
 
 it('rejects a --map value that is not a domain=domain pair', function () {

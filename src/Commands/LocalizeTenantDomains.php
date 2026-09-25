@@ -5,6 +5,7 @@ namespace Mmoollllee\LaravelDeployer\Commands;
 use Illuminate\Console\Command;
 use Illuminate\Database\Schema\Builder as SchemaBuilder;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 /**
  * Companion to `dep pull:db-refresh` / `dep pull:db-full`: a production dump
@@ -80,7 +81,7 @@ class LocalizeTenantDomains extends Command
         $local = $domains->map(fn (string $domain): string => $this->localDomain($domain, $map));
 
         // A mapped domain can land on one another tenant already has — refuse
-        // before the first write rather than die halfway on the unique index.
+        // before the first write rather than die on the unique index.
         $taken = $local->duplicates();
 
         if ($taken->isNotEmpty()) {
@@ -94,9 +95,16 @@ class LocalizeTenantDomains extends Command
         // builder, so no model events fire.
         $changed = $local->filter(fn (string $domain, int|string $id): bool => $domain !== $domains[$id]);
 
-        foreach ($changed as $id => $domain) {
-            DB::table('tenants')->where('id', $id)->update([$column => $domain]);
+        // One transaction: a row that takes a domain another row only gives up
+        // later in the loop still trips the unique index — then nothing changes
+        // rather than half the table.
+        DB::transaction(function () use ($changed, $column): void {
+            foreach ($changed as $id => $domain) {
+                DB::table('tenants')->where('id', $id)->update([$column => $domain]);
+            }
+        });
 
+        foreach ($changed as $id => $domain) {
             $this->line("  {$domains[$id]} → {$domain}");
         }
 
@@ -150,16 +158,24 @@ class LocalizeTenantDomains extends Command
      * The local twin of a production domain: an explicit `--map` target, else
      * the domain with `.test` appended. A domain an earlier run already suffixed
      * still reaches its mapping — a map added later heals the pulled database
-     * instead of leaving `vorschau.example.de.test` behind — and everything else
-     * ending in `.test` stays, which keeps the command idempotent.
+     * instead of leaving `vorschau.example.de.test` behind — while a map target
+     * and everything else ending in `.test` stay, which keeps the command
+     * idempotent. Lower-cased like DNS and the unique index read domains, so the
+     * clash check above sees what the index sees.
      *
      * @param  array<string, string>  $map
      */
     private function localDomain(string $domain, array $map): string
     {
-        $production = str_ends_with($domain, '.test') ? substr($domain, 0, -5) : $domain;
+        $domain = Str::lower($domain);
 
-        return $map[$production] ?? (str_ends_with($domain, '.test') ? $domain : $domain.'.test');
+        if (in_array($domain, $map, true)) {
+            return $domain;
+        }
+
+        $production = Str::chopEnd($domain, '.test');
+
+        return $map[$production] ?? $production.'.test';
     }
 
     /**
@@ -183,7 +199,7 @@ class LocalizeTenantDomains extends Command
                 return null;
             }
 
-            $map[$from] = $to;
+            $map[Str::lower($from)] = Str::lower($to);
         }
 
         return $map;

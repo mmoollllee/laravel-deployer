@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.2 — 2026-09-25
+
+- **Fix: `app:localize-tenant-domains` stays idempotent for any `--map` target.**
+  A target without a `.test` suffix (`example.localhost`) got one appended on the
+  next run, and a chained mapping re-mapped the previous run's result; map targets
+  now stay as they are. Domains are compared in lower case, as DNS and the unique
+  index compare them, so two tenants that differ in case only are refused before
+  the first write, and the rewrite runs in one transaction — it changes every
+  domain or none.
+
 ## 0.5.1 — 2026-09-25
 
 - **`app:localize-tenant-domains --map=domain=local-domain`** replaces a domain
