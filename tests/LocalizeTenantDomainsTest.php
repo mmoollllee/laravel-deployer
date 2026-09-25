@@ -118,6 +118,55 @@ it('fails cleanly when the tenants table has no domain column at all', function 
 });
 
 /**
+ * A staging subdomain has no ".test twin" of its own — the site is developed
+ * under the app's Herd domain. `--map` names that target explicitly.
+ */
+it('maps a domain to its local twin instead of appending .test', function () {
+    makeTenantsTable();
+
+    $staging = DB::table('tenants')->insertGetId(['primary_domain' => 'vorschau.example.de']);
+    $other = DB::table('tenants')->insertGetId(['primary_domain' => 'other.de']);
+
+    $this->artisan('app:localize-tenant-domains', ['--map' => ['vorschau.example.de=example.de.test']])->assertSuccessful();
+    $this->artisan('app:localize-tenant-domains', ['--map' => ['vorschau.example.de=example.de.test']])->assertSuccessful();
+
+    expect(DB::table('tenants')->where('id', $staging)->value('primary_domain'))->toBe('example.de.test')
+        ->and(DB::table('tenants')->where('id', $other)->value('primary_domain'))->toBe('other.de.test');
+});
+
+it('heals a domain an earlier run already suffixed', function () {
+    makeTenantsTable();
+
+    $id = DB::table('tenants')->insertGetId(['primary_domain' => 'vorschau.example.de.test']);
+
+    $this->artisan('app:localize-tenant-domains', ['--map' => ['vorschau.example.de=example.de.test']])->assertSuccessful();
+
+    expect(DB::table('tenants')->where('id', $id)->value('primary_domain'))->toBe('example.de.test');
+});
+
+it('refuses a mapping that would give two tenants the same domain', function () {
+    makeTenantsTable();
+
+    $staging = DB::table('tenants')->insertGetId(['primary_domain' => 'vorschau.example.de']);
+    $live = DB::table('tenants')->insertGetId(['primary_domain' => 'example.de']);
+
+    $this->artisan('app:localize-tenant-domains', ['--map' => ['vorschau.example.de=example.de.test']])->assertFailed();
+
+    expect(DB::table('tenants')->where('id', $staging)->value('primary_domain'))->toBe('vorschau.example.de')
+        ->and(DB::table('tenants')->where('id', $live)->value('primary_domain'))->toBe('example.de');
+});
+
+it('rejects a --map value that is not a domain=domain pair', function () {
+    makeTenantsTable();
+
+    $id = DB::table('tenants')->insertGetId(['primary_domain' => 'example.com']);
+
+    $this->artisan('app:localize-tenant-domains', ['--map' => ['example.com=']])->assertFailed();
+
+    expect(DB::table('tenants')->where('id', $id)->value('primary_domain'))->toBe('example.com');
+});
+
+/**
  * Some apps carry a per-tenant debug flag that a locally imported production
  * dump wants switched on — the point of pulling it is to look inside.
  */

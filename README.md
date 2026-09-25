@@ -40,7 +40,7 @@ Registered automatically by the package's service provider.
 
 | Command | Purpose |
 |---------|---------|
-| `app:localize-tenant-domains` | Appends `.test` to every tenant domain, so a production dump is reachable under Herd. Idempotent, and it refuses to run outside `local`/`testing` — it rewrites every domain there is, which on a server is the whole site. Multi-tenant apps only; it fails cleanly without a `tenants` table or a domain column in it. |
+| `app:localize-tenant-domains` | Appends `.test` to every tenant domain (or maps it with `--map`), so a production dump is reachable under Herd. Idempotent, and it refuses to run outside `local`/`testing` — it rewrites every domain there is, which on a server is the whole site. Multi-tenant apps only; it fails cleanly without a `tenants` table or a domain column in it. |
 | `app:send-test-mail [recipient]` | Sends one mail through the configured mailer and prints the transport's own error on failure (an SMTP 535 is the point of it). Defaults to `MAIL_FROM_ADDRESS`. Meant for the server: `dep shell`, then `art app:send-test-mail`. |
 | `app:install-git-hooks [--force]` | Installs `.githooks/pre-commit` and points `core.hooksPath` at it. The hook refuses to commit database dumps — see below. Idempotent; a hand-edited hook is left alone unless `--force`. |
 
@@ -98,6 +98,18 @@ runLocally('php artisan app:localize-tenant-domains --set=app_debug=1');
 ```
 
 `true`, `false` and `null` are read as those values rather than as strings.
+
+`--map=domain=local-domain` replaces one domain instead of suffixing it,
+repeatable. A staging subdomain has no `.test` twin of its own — the site is
+developed under the app's Herd domain:
+
+```php
+runLocally('php artisan app:localize-tenant-domains --map=vorschau.example.de=example.de.test');
+```
+
+A domain an earlier run already suffixed (`vorschau.example.de.test`) is mapped
+too, so adding a mapping heals an existing local copy. A mapping that would give
+two tenants the same domain aborts before a row is touched.
 
 ## Usage
 

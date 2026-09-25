@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.1 — 2026-09-25
+
+- **`app:localize-tenant-domains --map=domain=local-domain`** replaces a domain
+  instead of appending `.test`, repeatable. A staging subdomain
+  (`vorschau.example.de`) has no `.test` twin: the site is developed under the
+  app's Herd domain, and `vorschau.example.de.test` resolved to nothing. A domain
+  an earlier run already suffixed is mapped as well, so adding the option heals a
+  database pulled before; a mapping that would give two tenants the same domain
+  aborts before the first write. The command now prints each rewrite.
+
 ## 0.4.3 — 2026-08-25
 
 - **Fix: `pull:db-*` and `pull:files` create their local destination.** Deployer's

@@ -17,6 +17,11 @@ use Illuminate\Support\Facades\DB;
  *
  * Idempotent, and it refuses to run anywhere but local/testing — it rewrites
  * every tenant domain in the database, which on a server is the whole site.
+ *
+ * A domain whose local twin is not "append .test" — a staging subdomain that
+ * should land on the app's own Herd domain — is mapped explicitly:
+ *
+ *     php artisan app:localize-tenant-domains --map=vorschau.example.de=example.de.test
  */
 class LocalizeTenantDomains extends Command
 {
@@ -24,9 +29,10 @@ class LocalizeTenantDomains extends Command
     // attributes are Laravel 13, and this package supports 12 as well.
     protected $signature = 'app:localize-tenant-domains
         {--column= : Spalte mit der Tenant-Domain (Default: die erste vorhandene aus primary_domain, domain)}
+        {--map=* : Eine Domain gezielt ersetzen statt .test anzuhängen, z. B. --map=vorschau.example.de=example.de.test (mehrfach möglich)}
         {--set=* : Weitere Spalte für alle Tenants setzen, z. B. --set=app_debug=1 (mehrfach möglich)}';
 
-    protected $description = 'Hängt .test an alle Tenant-Domains, damit ein lokal eingespielter Prod-Dump unter Herd erreichbar ist (idempotent, nur lokal/Test).';
+    protected $description = 'Hängt .test an alle Tenant-Domains (oder ersetzt sie per --map), damit ein lokal eingespielter Prod-Dump unter Herd erreichbar ist (idempotent, nur lokal/Test).';
 
     /**
      * Domain column candidates, in probe order. The apps built on this package
@@ -60,27 +66,41 @@ class LocalizeTenantDomains extends Command
         }
 
         $extra = $this->extraColumnValues($schema);
+        $map = $this->domainMap();
 
-        if ($extra === null) {
+        if ($extra === null || $map === null) {
             return self::FAILURE;
         }
 
-        // Concatenated in PHP rather than with SQL CONCAT(): portable across
-        // MariaDB (Herd) and SQLite (tests), and it goes through the query
-        // builder, so no model events fire.
-        $tenants = DB::table('tenants')
+        $domains = DB::table('tenants')
             ->whereNotNull($column)
             ->where($column, '!=', '')
-            ->where($column, 'not like', '%.test')
-            ->get(['id', $column]);
+            ->pluck($column, 'id');
 
-        foreach ($tenants as $tenant) {
-            DB::table('tenants')
-                ->where('id', $tenant->id)
-                ->update([$column => $tenant->{$column}.'.test']);
+        $local = $domains->map(fn (string $domain): string => $this->localDomain($domain, $map));
+
+        // A mapped domain can land on one another tenant already has — refuse
+        // before the first write rather than die halfway on the unique index.
+        $taken = $local->duplicates();
+
+        if ($taken->isNotEmpty()) {
+            $this->error('Abgebrochen: Nach dem Umschreiben hätten mehrere Tenants dieselbe Domain ('.$taken->unique()->implode(', ').').');
+
+            return self::FAILURE;
         }
 
-        $this->info("{$tenants->count()} Tenant-Domain(s) in {$column} auf *.test umgeschrieben.");
+        // Rewritten in PHP rather than with SQL CONCAT(): portable across
+        // MariaDB (Herd) and SQLite (tests), and it goes through the query
+        // builder, so no model events fire.
+        $changed = $local->filter(fn (string $domain, int|string $id): bool => $domain !== $domains[$id]);
+
+        foreach ($changed as $id => $domain) {
+            DB::table('tenants')->where('id', $id)->update([$column => $domain]);
+
+            $this->line("  {$domains[$id]} → {$domain}");
+        }
+
+        $this->info("{$changed->count()} Tenant-Domain(s) in {$column} lokalisiert.");
 
         if ($extra !== []) {
             DB::table('tenants')->update($extra);
@@ -124,6 +144,49 @@ class LocalizeTenantDomains extends Command
         );
 
         return null;
+    }
+
+    /**
+     * The local twin of a production domain: an explicit `--map` target, else
+     * the domain with `.test` appended. A domain an earlier run already suffixed
+     * still reaches its mapping — a map added later heals the pulled database
+     * instead of leaving `vorschau.example.de.test` behind — and everything else
+     * ending in `.test` stays, which keeps the command idempotent.
+     *
+     * @param  array<string, string>  $map
+     */
+    private function localDomain(string $domain, array $map): string
+    {
+        $production = str_ends_with($domain, '.test') ? substr($domain, 0, -5) : $domain;
+
+        return $map[$production] ?? (str_ends_with($domain, '.test') ? $domain : $domain.'.test');
+    }
+
+    /**
+     * The `--map=domain=local-domain` pairs. Null when one is malformed, so the
+     * caller can abort before a single row is touched.
+     *
+     * @return array<string, string>|null
+     */
+    private function domainMap(): ?array
+    {
+        $map = [];
+
+        foreach ((array) $this->option('map') as $pair) {
+            [$from, $to] = is_string($pair) && str_contains($pair, '=')
+                ? array_map('trim', explode('=', $pair, 2))
+                : ['', ''];
+
+            if ($from === '' || $to === '') {
+                $this->error("Abgebrochen: --map={$pair} ist kein domain=lokale-domain-Paar.");
+
+                return null;
+            }
+
+            $map[$from] = $to;
+        }
+
+        return $map;
     }
 
     /**
