@@ -266,7 +266,7 @@ Everyday tasks — all of them run in `deploy_path`:
 
 | Task              | Description |
 |-------------------|-------------|
-| `deploy`          | In-place git deploy: pull, composer, assets, (clear + migrate), optimize. |
+| `deploy`          | In-place git deploy: pull, composer, optimize, assets, (clear + migrate), optimize. |
 | `deploy:quick`    | Code-only deploy: `git pull` + `optimize:clear` + `optimize`. For blade/config changes. |
 | `app:info`        | What is deployed: branch, commit, working-copy state, PHP, Laravel, `APP_ENV`/`APP_DEBUG`/`APP_URL`, pending migrations. |
 | `git:pull`        | `git pull` with `git_ssh_key`, nothing else. |
@@ -367,7 +367,7 @@ set('deploy_queue_restart', true); // artisan queue:restart after optimize
 // For bespoke steps, override deploy and compose the helpers:
 desc('Publish code on the remote');
 task('deploy', function () {
-    deploy_standard();               // update-code, vendors, assets, clear, migrate, optimize (+ toggles)
+    deploy_standard();               // update-code, vendors, optimize, assets, clear, migrate, optimize (+ toggles)
     cd('{{deploy_path}}');
     run('{{bin/php}} artisan storage:link');
 });

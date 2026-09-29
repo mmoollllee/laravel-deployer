@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.5.3 — 2026-09-29
+
+- **Fix: `deploy_standard()` rebuilds the framework caches right after
+  `composer install`,** before the asset build, and again at the end as before.
+  `git pull` puts the new code live in place, and it used to run against the
+  previous release's config and route cache until the final `optimize` — through
+  `npm ci` and the whole build. A config file the release added read as null in
+  that window, a new route name threw. On nest.kuckuck.cam a panel provider that
+  requires a new config key made every artisan boot throw for a minute, so the
+  scheduler lost that minute's jobs and web requests failed with it. What is left
+  is `composer install` itself (new code, old classmap), which only a release
+  directory could close. A site with its own `deploy` task that composes the
+  helpers should call `deploy_optimize()` after `deploy_vendors()` as well.
+
 ## 0.5.2 — 2026-09-25
 
 - **Fix: `app:localize-tenant-domains` stays idempotent for any `--map` target.**

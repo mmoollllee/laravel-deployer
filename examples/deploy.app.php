@@ -53,7 +53,7 @@ set('deploy_queue_restart', true); // artisan queue:restart after optimize
 /*
 | For anything bespoke, override `deploy` and compose the deploy_*() helpers.
 | deploy_standard() runs them in the default order (update-code, vendors,
-| assets, clear, migrate, optimize) plus the toggles above.
+| optimize, assets, clear, migrate, optimize) plus the toggles above.
 */
 
 desc('Publish code on the remote');

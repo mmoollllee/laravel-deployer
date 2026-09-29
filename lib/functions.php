@@ -369,11 +369,20 @@ function deploy_post_optimize(): void
  * {{deploy_migrate}} so sites without a front-end build or a database can reuse
  * it unchanged. Sites with extra steps define their own `deploy` task and call
  * these helpers in whatever order they need.
+ *
+ * The caches are rebuilt as soon as the new code has its vendors, not only at
+ * the end. `git pull` puts the new code live in place, and until the rebuild it
+ * ran against the old config and route cache for the whole asset build: a
+ * config file the release added read as null, a new route name threw. On
+ * nest.kuckuck.cam that made every artisan boot throw for a minute, and the
+ * scheduler lost that minute's jobs. The window left is `composer install`
+ * itself, which only a release directory could close.
  */
 function deploy_standard(): void
 {
     deploy_update_code();
     deploy_vendors();
+    deploy_optimize();
 
     if (get('deploy_assets')) {
         deploy_assets();
