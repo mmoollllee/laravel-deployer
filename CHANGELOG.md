@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.4 — 2026-10-06
+
+- **`pull:db-full --retry-load`** (and `pull:db-refresh --retry-load`) loads the
+  newest dump in the local `database/dumps` again, without a remote snapshot or a
+  download. An import that broke off after a pull of several hundred megabytes
+  used to mean pulling the whole snapshot again. It names the file, its size and
+  when it was pulled before it loads, refuses when there is no dump, and tasks
+  hooked onto the pull (`after('pull:db-full', …)`) run as usual.
+
 ## 0.5.3 — 2026-09-29
 
 - **Fix: `deploy_standard()` rebuilds the framework caches right after

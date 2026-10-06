@@ -6,6 +6,10 @@
  *   pull:db-refresh — only the tables listed in {{db_pull_include}}
  *   pull:db-full    — the whole database
  *
+ * `--retry-load` skips the remote snapshot and the download and loads the
+ * newest dump already in database/dumps again — for an import that broke off
+ * after a pull of several hundred megabytes.
+ *
  * Both leave local caches in a safe state (config:clear only). Sites that need
  * extra local fixups — e.g. rewriting tenant domains to *.test — hook a task
  * onto `after('pull:db-refresh', …)` and `after('pull:db-full', …)`.
@@ -18,7 +22,11 @@
 
 namespace Deployer;
 
+use Symfony\Component\Console\Input\InputOption;
+
 require_once __DIR__ . '/../lib/functions.php';
+
+option('retry-load', null, InputOption::VALUE_NONE, 'pull:db-*: load the newest local dump again instead of pulling a new one');
 
 /**
  * Fail early with a clear message when the app is missing the snapshot:* commands
@@ -36,6 +44,14 @@ function assert_snapshots_available(): void
     if (trim(runLocally('php artisan help snapshot:load >/dev/null 2>&1 && echo snapshots-ok', nothrow: true)) !== 'snapshots-ok') {
         throw new \RuntimeException('Local app has no snapshot:* commands — add spatie/laravel-db-snapshots (or a compatible fork) to the project.');
     }
+}
+
+/**
+ * Whether the run asked to load the last pulled dump again (`--retry-load`).
+ */
+function pull_db_retry_requested(): bool
+{
+    return input()->hasOption('retry-load') && (bool) input()->getOption('retry-load');
 }
 
 /**
@@ -58,9 +74,47 @@ function pull_db_download_and_load(bool $dropTables): void
     download("{{deploy_path}}/database/dumps/{$remote}", "database/dumps/{$remote}");
     run('{{bin/php}} artisan snapshot:cleanup --keep=1');
 
+    pull_db_load($remote, $dropTables);
+}
+
+/**
+ * Load the newest dump in the local database/dumps again, without touching the
+ * remote — `dep pull:db-full --retry-load`. Refuses when there is none.
+ *
+ * @param bool $dropTables see pull_db_download_and_load()
+ */
+function pull_db_reload_latest(bool $dropTables): void
+{
+    $dumps = array_merge(glob('database/dumps/*.sql') ?: [], glob('database/dumps/*.sql.gz') ?: []);
+
+    if ($dumps === []) {
+        throw new \RuntimeException('No dump in database/dumps to load again — run the pull without --retry-load.');
+    }
+
+    usort($dumps, fn (string $a, string $b): int => filemtime($b) <=> filemtime($a));
+    $file = $dumps[0];
+
+    writeln(sprintf(
+        '<info>Loading %s again (%.1f MB, pulled %s).</info>',
+        basename($file),
+        filesize($file) / 1024 / 1024,
+        date('Y-m-d H:i', filemtime($file)),
+    ));
+
+    pull_db_load(basename($file), $dropTables);
+}
+
+/**
+ * Load a dump from the local database/dumps into the local DB.
+ *
+ * @param string $file       file name of the dump inside database/dumps
+ * @param bool   $dropTables see pull_db_download_and_load()
+ */
+function pull_db_load(string $file, bool $dropTables): void
+{
     // Strip the snapshot extension (.sql.gz when compressed, .sql when not) to
     // get the snapshot name that snapshot:load expects.
-    $dump = escapeshellarg(preg_replace('/\.sql(\.gz)?$/', '', $remote));
+    $dump = escapeshellarg(preg_replace('/\.sql(\.gz)?$/', '', $file));
     $drop = $dropTables ? '' : ' --drop-tables=0';
 
     runLocally("php artisan snapshot:load {$dump}{$drop} --stream --force", ...long_running());
@@ -84,6 +138,13 @@ task('pull:db-refresh', function () {
         return;
     }
 
+    if (pull_db_retry_requested()) {
+        pull_db_reload_latest(dropTables: false);
+        writeln('<info>✓ DB refresh loaded again.</info>');
+
+        return;
+    }
+
     cd('{{deploy_path}}');
     assert_snapshots_available();
     run('{{bin/php}} artisan snapshot:create --table=' . implode(' --table=', $tables), ...long_running());
@@ -95,6 +156,13 @@ task('pull:db-refresh', function () {
 
 desc('Pull the full DB from remote → local (snapshot)');
 task('pull:db-full', function () {
+    if (pull_db_retry_requested()) {
+        pull_db_reload_latest(dropTables: true);
+        writeln('<info>✓ Full DB loaded again.</info>');
+
+        return;
+    }
+
     cd('{{deploy_path}}');
     assert_snapshots_available();
     run('{{bin/php}} artisan snapshot:create', ...long_running());

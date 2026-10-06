@@ -287,6 +287,7 @@ Deploy and sync:
 |-------------------|-------------|
 | `pull:db-refresh` | Snapshot only the `db_pull_include` tables → local (keeps other local tables). |
 | `pull:db-full`    | Snapshot the whole DB → local. |
+| `pull:db-* --retry-load` | Load the newest dump in `database/dumps` again — no snapshot, no download. |
 | `pull:files`      | Download `files` from the server (mirror). |
 | `push:files`      | Upload `files` to the server (never deletes remotely). |
 | `setup`           | Non-destructive first-time setup: uploads auth.json, `.env` (if missing), deps, key (if missing), storage-link, `migrate --force` (`--seed` opt-in), optimize. |
@@ -306,6 +307,14 @@ dep run 'php artisan about'
 `optimize`. Caching config locally would bake the dev-DB credentials into
 `bootstrap/cache/config.php`, after which a `RefreshDatabase` test run could hit
 and wipe the real local database.
+
+When the local import breaks off after the download (a lock, a full disk, a
+killed process), `--retry-load` loads the dump that is already there instead of
+pulling it again; tasks hooked onto the pull still run afterwards:
+
+```bash
+dep pull:db-full --retry-load
+```
 
 They also need the `snapshot:*` artisan commands (`spatie/laravel-db-snapshots`
 or a compatible fork) installed in the app **both locally and on the remote** —
