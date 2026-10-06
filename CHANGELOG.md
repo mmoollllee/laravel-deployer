@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.5 — 2026-10-06
+
+- **Fix: `--retry-load` says how old the dump is** instead of when it was pulled.
+  Deployer's PHP runs in UTC, so the time it printed was hours off the local
+  clock.
+
 ## 0.5.4 — 2026-10-06
 
 - **`pull:db-full --retry-load`** (and `pull:db-refresh --retry-load`) loads the

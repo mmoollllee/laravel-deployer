@@ -47,10 +47,14 @@ it('loads the newest local dump again without touching the remote', function () 
     File::put($this->sandbox.'/database/dumps/2026-10-05_09-00-00.sql.gz', 'old');
     touch($this->sandbox.'/database/dumps/2026-10-05_09-00-00.sql.gz', time() - 86400);
     File::put($this->sandbox.'/database/dumps/2026-10-06_14-25-43.sql.gz', 'new');
+    touch($this->sandbox.'/database/dumps/2026-10-06_14-25-43.sql.gz', time() - 3 * 3600);
 
-    ($this->dep)('pull:db-full', '--retry-load')->mustRun();
+    $deploy = ($this->dep)('pull:db-full', '--retry-load');
+    $deploy->mustRun();
 
-    expect(file($this->log, FILE_IGNORE_NEW_LINES))->toBe([
+    expect($deploy->getOutput())->toContain('Loading 2026-10-06_14-25-43.sql.gz again')
+        ->and($deploy->getOutput())->toContain('pulled 3 h ago')
+        ->and(file($this->log, FILE_IGNORE_NEW_LINES))->toBe([
         'php artisan snapshot:load 2026-10-06_14-25-43 --stream --force',
         'php artisan config:clear',
     ]);

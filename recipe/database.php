@@ -94,11 +94,20 @@ function pull_db_reload_latest(bool $dropTables): void
     usort($dumps, fn (string $a, string $b): int => filemtime($b) <=> filemtime($a));
     $file = $dumps[0];
 
+    // The age, not a clock time: Deployer's PHP usually runs in UTC, so a
+    // formatted time would be hours off the developer's own clock.
+    $minutes = intdiv(max(0, time() - filemtime($file)), 60);
+    $age = match (true) {
+        $minutes < 60 => "{$minutes} min",
+        $minutes < 48 * 60 => intdiv($minutes, 60) . ' h',
+        default => intdiv($minutes, 24 * 60) . ' days',
+    };
+
     writeln(sprintf(
-        '<info>Loading %s again (%.1f MB, pulled %s).</info>',
+        '<info>Loading %s again (%.1f MB, pulled %s ago).</info>',
         basename($file),
         filesize($file) / 1024 / 1024,
-        date('Y-m-d H:i', filemtime($file)),
+        $age,
     ));
 
     pull_db_load(basename($file), $dropTables);
