@@ -172,6 +172,7 @@ whichever command registers last wins, and the stale one is the dangerous half.
 | `deploy_assets`     | `true`  | Run `npm ci && npm run build`. |
 | `deploy_migrate`    | `true`  | Run `artisan migrate --force`. |
 | `deploy_cache_clear` | `false` | Run `artisan cache:clear` after optimize. |
+| `deploy_clear_app_cache` | `true` | `optimize:clear` (before migrating, and in `deploy:quick`) empties the application cache too. `false` keeps it (`--except=cache`): scheduler mutexes, locks and other state survive the deploy. A release that changes what a cache holds then needs one deploy with it on (`-o deploy_clear_app_cache=true`). |
 | `deploy_queue_restart` | `false` | Run `artisan queue:restart` after optimize. |
 | `files`             | `[]`    | Storage folders for `pull:files` / `push:files`. |
 | `files_pull_delete` | `true`  | Mirror on pull (`rsync --delete`). |
@@ -267,7 +268,7 @@ Everyday tasks — all of them run in `deploy_path`:
 | Task              | Description |
 |-------------------|-------------|
 | `deploy`          | In-place git deploy: pull, composer, optimize, assets, (clear + migrate), optimize. |
-| `deploy:quick`    | Code-only deploy: `git pull` + `optimize:clear` + `optimize`. For blade/config changes. |
+| `deploy:quick`    | Code-only deploy: `git pull` + `optimize:clear` + `optimize`. For blade/config changes. `optimize:clear` follows `deploy_clear_app_cache`. |
 | `app:info`        | What is deployed: branch, commit, working-copy state, PHP, Laravel, `APP_ENV`/`APP_DEBUG`/`APP_URL`, pending migrations. |
 | `git:pull`        | `git pull` with `git_ssh_key`, nothing else. |
 | `git:fetch`       | `git fetch --prune`, then `git status`. |

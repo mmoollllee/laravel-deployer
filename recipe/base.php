@@ -88,6 +88,7 @@ set('shell_aliases', ['art' => '{{bin/php}} artisan']);
 set('deploy_assets', true);         // run `npm ci && npm run build`
 set('deploy_migrate', true);        // run `artisan migrate --force`
 set('deploy_cache_clear', false);   // run `artisan cache:clear` after optimize
+set('deploy_clear_app_cache', true); // `optimize:clear` empties the app cache too; false → `--except=cache`
 set('deploy_queue_restart', false); // run `artisan queue:restart` after optimize
 
 // Storage folders synced by pull:files / push:files.

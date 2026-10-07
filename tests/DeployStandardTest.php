@@ -82,3 +82,40 @@ it('rebuilds the caches right after composer install, before the asset build', f
         'php artisan optimize',
     ]);
 });
+
+it('keeps the application cache when told to, and clears only the framework caches', function () {
+    File::append($this->sandbox.'/deploy.php', "\nset('deploy_clear_app_cache', false);\n");
+
+    (new Process(
+        [dirname(__DIR__).'/vendor/bin/dep', 'standard', '--file='.$this->sandbox.'/deploy.php', '--no-interaction'],
+        $this->sandbox,
+        ['PATH' => $this->sandbox.'/path:'.getenv('PATH')],
+    ))->mustRun();
+
+    // Scheduler mutexes, locks and whatever the site records in its cache
+    // survive; config, route, view and event caches are rebuilt as before.
+    expect(file($this->log, FILE_IGNORE_NEW_LINES))
+        ->toContain('php artisan optimize:clear --except=cache')
+        ->not->toContain('php artisan optimize:clear');
+});
+
+it('lets a task that runs first turn the flush back on for that deploy', function () {
+    // How a site builds its "this release changes what a cache holds" deploy:
+    // the setting a task writes reaches the tasks after it in the same run.
+    File::append($this->sandbox.'/deploy.php', <<<'PHP'
+
+        set('deploy_clear_app_cache', false);
+        task('flush-app-cache', fn () => set('deploy_clear_app_cache', true));
+        task('fresh', ['flush-app-cache', 'standard']);
+        PHP);
+
+    (new Process(
+        [dirname(__DIR__).'/vendor/bin/dep', 'fresh', '--file='.$this->sandbox.'/deploy.php', '--no-interaction'],
+        $this->sandbox,
+        ['PATH' => $this->sandbox.'/path:'.getenv('PATH')],
+    ))->mustRun();
+
+    expect(file($this->log, FILE_IGNORE_NEW_LINES))
+        ->toContain('php artisan optimize:clear')
+        ->not->toContain('php artisan optimize:clear --except=cache');
+});

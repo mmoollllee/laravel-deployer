@@ -323,11 +323,22 @@ function deploy_assets(): void
     run('npm run build', ...long_running());
 }
 
-/** Remote: drop stale config/route/view caches before migrating. */
+/**
+ * Remote: drop stale config/route/view caches before migrating.
+ *
+ * `optimize:clear` empties the application cache as well (`cache:clear`), and
+ * with it state a site keeps there: scheduler mutexes, locks, rate limits and
+ * whatever it records for later. With `deploy_clear_app_cache` off only the
+ * framework caches go (`--except=cache`); a release that changes what a cache
+ * holds then needs one deploy that turns it back on.
+ */
 function deploy_clear(): void
 {
     cd('{{deploy_path}}');
-    run('{{bin/php}} artisan optimize:clear');
+    // Defaulted here as well: a deploy.php may compose the helpers without the recipe.
+    run(get('deploy_clear_app_cache', true)
+        ? '{{bin/php}} artisan optimize:clear'
+        : '{{bin/php}} artisan optimize:clear --except=cache');
 }
 
 /** Remote: run database migrations. */

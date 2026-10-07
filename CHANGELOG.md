@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.5.6 — 2026-10-07
+
+- **`deploy_clear_app_cache`** (default `true`, unchanged behaviour): set it to
+  `false` and `optimize:clear` — before migrating and in `deploy:quick` — keeps
+  the application cache (`--except=cache`) and clears only the framework caches.
+  A full flush took scheduler mutexes, locks and whatever a site records in its
+  cache with every deploy; on nest.kuckuck.cam that sent every public scene's
+  images through PHP until a five-minute sync had recorded its bucket grants
+  again. A release that changes what a cache holds then deploys once with it on,
+  e.g. `dep deploy -o deploy_clear_app_cache=true`, or from a task that sets it
+  before the deploy runs — a setting a task writes reaches the tasks after it.
+
 ## 0.5.5 — 2026-10-06
 
 - **Fix: `--retry-load` says how old the dump is** instead of when it was pulled.
