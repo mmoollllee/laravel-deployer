@@ -10,6 +10,7 @@
 
 namespace Deployer;
 
+use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 use Symfony\Component\Console\Output\OutputInterface;
 
@@ -143,6 +144,55 @@ function option_lines(int $default): int
     $lines = input()->hasOption('lines') ? input()->getOption('lines') : null;
 
     return (is_string($lines) && ctype_digit($lines) && (int) $lines > 0) ? (int) $lines : $default;
+}
+
+/**
+ * Splits table names as they are typed — `"users posts"`, `users,posts` — into a
+ * list without duplicates.
+ *
+ * The names end up unquoted in `artisan snapshot:create --table=…` on the
+ * remote, so anything beyond letters, digits, `_`, `$`, `.` and `-` is refused
+ * rather than escaped: no table needs more, and a name that does is far likelier
+ * a typo or a stray shell character.
+ *
+ * @return list<string>
+ */
+function parse_table_list(string ...$values): array
+{
+    $tables = [];
+
+    foreach ($values as $value) {
+        foreach (preg_split('/[\s,]+/', $value, -1, PREG_SPLIT_NO_EMPTY) as $table) {
+            if (! preg_match('/^[\w$.\-]+$/', $table)) {
+                throw new \InvalidArgumentException("Not a table name: {$table}");
+            }
+
+            $tables[] = $table;
+        }
+    }
+
+    return array_values(array_unique($tables));
+}
+
+/**
+ * Registers a console command next to Deployer's own (`dep shell`, `dep pull:db`).
+ *
+ * Deployer::init() turns the tasks into commands only after the recipes are
+ * imported, so a task of the same name in deploy.php replaces the command — and
+ * one of Deployer's own command names cannot be taken at all.
+ */
+function add_console_command(Command $command): void
+{
+    $console = Deployer::get()->getConsole();
+
+    // Symfony Console renamed add() to addCommand() in 7.4 — the version
+    // Deployer 8 requires — but an older console pinned in the project would
+    // only have add().
+    if (method_exists($console, 'addCommand')) {
+        $console->addCommand($command);
+    } else {
+        $console->add($command);
+    }
 }
 
 /**

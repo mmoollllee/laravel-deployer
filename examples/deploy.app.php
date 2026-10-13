@@ -17,7 +17,8 @@ host('example.com')
     // Deploy key for `git pull` (optional; omit to use ~/.ssh/config).
     ->set('git_ssh_key', '~/.ssh/example_ed25519');
 
-// Tables copied by `dep pull:db-refresh`.
+// Tables copied by `dep pull:db-refresh`. Others can be pulled ad hoc:
+// `dep pull:db "posts comments"`.
 set('db_pull_include', [
     'migrations',
     'users',

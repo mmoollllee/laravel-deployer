@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.5.7 — 2026-10-13
+
+- **`dep pull:db <tables>`** pulls only the tables named on the command line —
+  `dep pull:db users`, `dep pull:db "users posts"` — and leaves every other local
+  table as it is, without editing `db_pull_include` first. Several tables go into
+  one argument, because Deployer reads every further positional argument as a host
+  selector (`dep pull:db users,posts production`); `dep pull:db users posts` stops
+  with that hint instead of looking for a host called `posts`. A task cannot take
+  an argument of its own, so this is a console command in front of
+  `pull:db-refresh`, which it runs with the new `--tables` option: the hooks a site
+  puts on `pull:db-refresh` run after an ad-hoc pull too. Table names are limited
+  to letters, digits, `_`, `$`, `.` and `-`, the ones from `db_pull_include`
+  included — they reach the remote shell unquoted. A site with a `pull:db` task of
+  its own keeps it.
+
 ## 0.5.6 — 2026-10-07
 
 - **`deploy_clear_app_cache`** (default `true`, unchanged behaviour): set it to

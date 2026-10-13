@@ -252,13 +252,4 @@ require_once __DIR__ . '/tasks.php';
 | overwrite anything we put under one of its own names.
 */
 
-$console = Deployer::get()->getConsole();
-$command = new ShellCommand(Deployer::get());
-
-// Symfony Console renamed add() to addCommand() in 7.4 — the version Deployer 8
-// requires — but an older console pinned in the project would only have add().
-if (method_exists($console, 'addCommand')) {
-    $console->addCommand($command);
-} else {
-    $console->add($command);
-}
+add_console_command(new ShellCommand(Deployer::get()));

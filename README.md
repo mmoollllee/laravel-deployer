@@ -46,8 +46,8 @@ Registered automatically by the package's service provider.
 
 ### Keeping production dumps out of git
 
-`pull:db-full` and `pull:db-refresh` drop a **production** snapshot into the working
-tree. History is forever and a pushed dump cannot be taken back, so run this once per
+`pull:db`, `pull:db-refresh` and `pull:db-full` drop a **production** snapshot into the
+working tree. History is forever and a pushed dump cannot be taken back, so run this once per
 clone:
 
 ```bash
@@ -147,7 +147,7 @@ See [`examples/`](examples) for full templates.
 
 ```bash
 php artisan deploy            # the deploy task from this project's deploy.php
-php artisan deploy pull:db    # any other task, same as `dep pull:db`
+php artisan deploy pull:files # any other task, same as `dep pull:files`
 vendor/bin/dep deploy         # Deployer directly — identical, minus the guards
 ```
 
@@ -176,7 +176,7 @@ whichever command registers last wins, and the stale one is the dangerous half.
 | `deploy_queue_restart` | `false` | Run `artisan queue:restart` after optimize. |
 | `files`             | `[]`    | Storage folders for `pull:files` / `push:files`. |
 | `files_pull_delete` | `true`  | Mirror on pull (`rsync --delete`). |
-| `db_pull_include`   | `[]`    | Tables for `pull:db-refresh`. |
+| `db_pull_include`   | `[]`    | Tables for `pull:db-refresh`. `dep pull:db <tables>` names others ad hoc. |
 | `auth_json`         | `null`  | Local auth.json uploaded by `setup`/`push:auth`. `null` → auto-detect (`./auth.json`, then `~/.composer/auth.json`). |
 | `shell_env`         | `[]`    | Extra environment exported by `dep shell`. |
 | `shell_aliases`     | `['art' => '{{bin/php}} artisan']` | Shorthand commands available in `dep shell`. |
@@ -286,6 +286,7 @@ Deploy and sync:
 
 | Task              | Description |
 |-------------------|-------------|
+| `pull:db <tables>` | Snapshot only the tables given → local (keeps other local tables): `dep pull:db "users posts"`. |
 | `pull:db-refresh` | Snapshot only the `db_pull_include` tables → local (keeps other local tables). |
 | `pull:db-full`    | Snapshot the whole DB → local. |
 | `pull:db-* --retry-load` | Load the newest dump in `database/dumps` again — no snapshot, no download. |
@@ -304,7 +305,7 @@ Anything else is a `dep run`:
 dep run 'php artisan about'
 ```
 
-`pull:db-*` load the dump locally and then run **`config:clear` only** — never
+The `pull:db*` tasks load the dump locally and then run **`config:clear` only** — never
 `optimize`. Caching config locally would bake the dev-DB credentials into
 `bootstrap/cache/config.php`, after which a `RefreshDatabase` test run could hit
 and wipe the real local database.
@@ -321,6 +322,30 @@ They also need the `snapshot:*` artisan commands (`spatie/laravel-db-snapshots`
 or a compatible fork) installed in the app **both locally and on the remote** —
 the recipe only shells out to them, so it is a Composer `suggest` rather than a
 hard dependency, and asserts their presence before running.
+
+### Pulling single tables
+
+`pull:db` takes the tables from the command line instead of from `db_pull_include`:
+
+```bash
+dep pull:db users
+dep pull:db "users posts"            # several tables: one argument, space or comma separated
+dep pull:db users,posts production   # a host selector goes after the tables
+```
+
+Only the named tables are replaced locally; every other local table stays as it is.
+Several tables go into **one** argument because Deployer reads every further positional
+argument as a host selector — the same rule as for `dep run '<command>' [selector]` — so
+`dep pull:db users posts` would look for a host called `posts`. It stops with a hint
+instead of pulling anything.
+
+It is a front for `pull:db-refresh`, which it runs with `--tables`: hooks on
+`pull:db-refresh` (localizing tenant domains, say) run after it too, and `--no-hooks`
+skips them. `dep pull:db-refresh --tables=users,posts` is the same call spelled out.
+
+Table names may contain letters, digits, `_`, `$`, `.` and `-` only — they reach the
+remote shell unquoted. A site that defines a `pull:db` task of its own keeps it: a task
+replaces the command of the same name.
 
 ### Where a pull lands locally
 
@@ -434,9 +459,10 @@ composer global require deployer/deployer:^8.0
 ```
 lib/functions.php     step helpers + long_running() + git env helpers
 lib/ShellCommand.php  the `dep shell` console command
+lib/PullDbCommand.php the `dep pull:db <tables>` console command
 recipe/base.php       config defaults, deploy, pull/push:files, push:auth, setup
 recipe/tasks.php      git:*, composer:*, assets:build, logs*, app:info, deploy:quick
-recipe/database.php   pull:db-refresh, pull:db-full
+recipe/database.php   pull:db, pull:db-refresh, pull:db-full
 recipe/app.php        entry: Deployer laravel + rsync + base + database
 recipe/signatur.php   entry: Deployer laravel + rsync + base (no DB, no migrate)
 examples/             copy-paste deploy.php templates

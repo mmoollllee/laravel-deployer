@@ -1,16 +1,17 @@
 <?php
 
 /**
- * Database pull recipe: copy the remote database to local via snapshots. Two entry points:
+ * Database pull recipe: copy the remote database to local via snapshots. Three entry points:
  *
- *   pull:db-refresh — only the tables listed in {{db_pull_include}}
- *   pull:db-full    — the whole database
+ *   pull:db <tables> — only the tables given (runs pull:db-refresh with --tables)
+ *   pull:db-refresh  — only the tables listed in {{db_pull_include}}
+ *   pull:db-full     — the whole database
  *
  * `--retry-load` skips the remote snapshot and the download and loads the
  * newest dump already in database/dumps again — for an import that broke off
  * after a pull of several hundred megabytes.
  *
- * Both leave local caches in a safe state (config:clear only). Sites that need
+ * All leave local caches in a safe state (config:clear only). Sites that need
  * extra local fixups — e.g. rewriting tenant domains to *.test — hook a task
  * onto `after('pull:db-refresh', …)` and `after('pull:db-full', …)`.
  *
@@ -22,10 +23,15 @@
 
 namespace Deployer;
 
+use Mmoollllee\LaravelDeployer\PullDbCommand;
 use Symfony\Component\Console\Input\InputOption;
 
 require_once __DIR__ . '/../lib/functions.php';
+require_once __DIR__ . '/../lib/PullDbCommand.php';
 
+// Registered before the command at the end of this file is built: a MainCommand
+// takes the global options as they stand when it is constructed.
+option('tables', null, InputOption::VALUE_REQUIRED, 'pull:db-refresh: these tables instead of db_pull_include (space or comma separated)');
 option('retry-load', null, InputOption::VALUE_NONE, 'pull:db-*: load the newest local dump again instead of pulling a new one');
 
 /**
@@ -137,12 +143,27 @@ function pull_db_load(string $file, bool $dropTables): void
     runLocally('php artisan config:clear');
 }
 
+/**
+ * The tables pull:db-refresh snapshots: the `--tables` option when given — that
+ * is how `dep pull:db <tables>` hands them over — else {{db_pull_include}}.
+ *
+ * @return list<string>
+ */
+function db_pull_tables(): array
+{
+    $tables = input()->hasOption('tables') ? input()->getOption('tables') : null;
+
+    return is_string($tables) && $tables !== ''
+        ? parse_table_list($tables)
+        : parse_table_list(...array_values(get('db_pull_include')));
+}
+
 desc('Pull selected DB tables from remote → local (snapshot)');
 task('pull:db-refresh', function () {
-    $tables = get('db_pull_include');
+    $tables = db_pull_tables();
 
-    if (empty($tables)) {
-        writeln('<error>No tables defined. Set `db_pull_include` in deploy.php.</error>');
+    if ($tables === []) {
+        writeln('<error>No tables defined. Set `db_pull_include` in deploy.php, or name them: dep pull:db "users posts"</error>');
 
         return;
     }
@@ -160,7 +181,9 @@ task('pull:db-refresh', function () {
 
     pull_db_download_and_load(dropTables: false);
 
-    writeln('<info>✓ DB refresh pulled via snapshots.</info>');
+    // parse_table_list() lets no character through that writeln() would read
+    // as markup.
+    writeln('<info>✓ DB refresh pulled via snapshots: ' . implode(', ', $tables) . '.</info>');
 });
 
 desc('Pull the full DB from remote → local (snapshot)');
@@ -180,3 +203,7 @@ task('pull:db-full', function () {
 
     writeln('<info>✓ Full DB pulled via snapshots.</info>');
 });
+
+// `dep pull:db <tables>` is a console command rather than a task, because a task
+// cannot take an argument of its own — see lib/PullDbCommand.php.
+add_console_command(new PullDbCommand(Deployer::get()));
