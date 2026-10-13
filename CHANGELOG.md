@@ -14,6 +14,10 @@
   to letters, digits, `_`, `$`, `.` and `-`, the ones from `db_pull_include`
   included — they reach the remote shell unquoted. A site with a `pull:db` task of
   its own keeps it.
+- **`php artisan deploy` hands further arguments to dep** —
+  `php artisan deploy pull:db "users posts"`. dep's own options go behind `--`
+  (`php artisan deploy -- pull:db users --no-hooks`); in front of it they are
+  artisan's, which refuses the ones it does not know.
 
 ## 0.5.6 — 2026-10-07
 

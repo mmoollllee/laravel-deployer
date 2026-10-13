@@ -18,18 +18,26 @@ use Symfony\Component\Process\Process;
  *
  * Everything else stays Deployer's job: the recipe decides what a deploy does,
  * this only starts it and passes its exit code back.
+ *
+ * Further arguments go to `dep` unchanged — `artisan deploy pull:db "users posts"`
+ * is `dep pull:db "users posts"`. Options of dep's own go behind `--`
+ * (`artisan deploy -- pull:db users --no-hooks`), or artisan reads them as its
+ * own and refuses the ones it does not know.
  */
 class Deploy extends Command
 {
     // Declared as properties rather than #[Signature]/#[Description]: those
     // attributes are Laravel 13, and this package supports 12 as well.
-    protected $signature = 'deploy {task=deploy : Deployer-Task aus der deploy.php} {--force : Auch mit APP_ENV=production starten}';
+    protected $signature = 'deploy
+        {task=deploy : Deployer-Task aus der deploy.php}
+        {arguments?* : Weitere Argumente für dep, z. B. die Tabellen für pull:db – dep-Optionen hinter --}
+        {--force : Auch mit APP_ENV=production starten}';
 
     protected $description = 'Startet den Deployer-Task dieses Projekts (vendor/bin/dep)';
 
     public function handle(): int
     {
-        $task = (string) $this->argument('task');
+        $arguments = [(string) $this->argument('task'), ...$this->argument('arguments')];
 
         // On the server this would point the deploy at the host it is already
         // running on — and over an SSH session the command name is exactly the
@@ -49,7 +57,7 @@ class Deploy extends Command
         if (! is_file($binary)) {
             $this->components->error(
                 'vendor/bin/dep fehlt: `composer require --dev deployer/deployer` — oder Deployer global installieren '
-                ."und `dep {$task}` direkt aufrufen."
+                .'und `'.$this->commandLine($arguments).'` direkt aufrufen.'
             );
 
             return self::FAILURE;
@@ -61,7 +69,7 @@ class Deploy extends Command
             return self::FAILURE;
         }
 
-        $process = new Process([$binary, $task], base_path());
+        $process = new Process([$binary, ...$arguments], base_path());
         // A deploy runs as long as composer, the asset build and the migrations
         // need; Symfony's 60s default would kill it mid-flight.
         $process->setTimeout(null);
@@ -76,5 +84,19 @@ class Deploy extends Command
         return $process->run(function (string $type, string $buffer): void {
             $this->output->write($buffer);
         });
+    }
+
+    /**
+     * The dep call as one would type it, for messages: an argument that a shell
+     * would split or expand is quoted.
+     *
+     * @param  list<string>  $arguments
+     */
+    private function commandLine(array $arguments): string
+    {
+        return 'dep '.implode(' ', array_map(
+            fn (string $argument) => preg_match('/^[\w\/.:,=@%+-]+$/', $argument) ? $argument : escapeshellarg($argument),
+            $arguments,
+        ));
     }
 }

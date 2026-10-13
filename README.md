@@ -146,10 +146,15 @@ See [`examples/`](examples) for full templates.
 ### Running a deploy
 
 ```bash
-php artisan deploy            # the deploy task from this project's deploy.php
-php artisan deploy pull:files # any other task, same as `dep pull:files`
-vendor/bin/dep deploy         # Deployer directly — identical, minus the guards
+php artisan deploy                              # the deploy task from this project's deploy.php
+php artisan deploy pull:files                   # any other task, same as `dep pull:files`
+php artisan deploy pull:db "users posts"        # further arguments go along unchanged
+php artisan deploy -- pull:db users --no-hooks  # dep's own options go behind --
+vendor/bin/dep deploy                           # Deployer directly — identical, minus the guards
 ```
+
+Options in front of `--` are artisan's: it refuses `--no-hooks` there as an option it
+does not know.
 
 `artisan deploy` is a thin wrapper around `vendor/bin/dep` and exists for one
 reason: apps used to ship a **local** `deploy` command that held the SERVER-side
