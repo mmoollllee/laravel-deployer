@@ -77,7 +77,7 @@ function pull_db_download_and_load(bool $dropTables): void
     // directory that is not there.
     ensure_local_dir('database/dumps');
 
-    download("{{deploy_path}}/database/dumps/{$remote}", "database/dumps/{$remote}");
+    download("{{deploy_path}}/database/dumps/{$remote}", local_path("database/dumps/{$remote}"));
     run('{{bin/php}} artisan snapshot:cleanup --keep=1');
 
     pull_db_load($remote, $dropTables);
@@ -91,7 +91,9 @@ function pull_db_download_and_load(bool $dropTables): void
  */
 function pull_db_reload_latest(bool $dropTables): void
 {
-    $dumps = array_merge(glob('database/dumps/*.sql') ?: [], glob('database/dumps/*.sql.gz') ?: []);
+    // In the project, where the pull put it — not wherever dep was started.
+    $dir = local_path('database/dumps');
+    $dumps = array_merge(glob("{$dir}/*.sql") ?: [], glob("{$dir}/*.sql.gz") ?: []);
 
     if ($dumps === []) {
         throw new \RuntimeException('No dump in database/dumps to load again — run the pull without --retry-load.');

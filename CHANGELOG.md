@@ -18,6 +18,16 @@
   `php artisan deploy pull:db "users posts"`. dep's own options go behind `--`
   (`php artisan deploy -- pull:db users --no-hooks`); in front of it they are
   artisan's, which refuses the ones it does not know.
+- **Fix: local paths count from the project, wherever `dep` is started.** Deployer 8
+  runs `runLocally()` in the directory of `deploy.php`, but hands the local side of
+  `download()`/`upload()` to rsync relative to the working directory. Started
+  anywhere else (`dep --file=…`), `pull:db*` created the dump directory in the
+  project and then rsynced into the working directory, which failed; `pull:files`
+  and `push:files` synced the wrong directory, `push:auth` missed the project's
+  auth.json and could fall back on the global one, and `--retry-load` looked for
+  the dump in the working directory. The new `local_path()` anchors all of them
+  where `runLocally()` works. Sites with a download task of their own should use
+  it for the local side as well.
 
 ## 0.5.6 — 2026-10-07
 

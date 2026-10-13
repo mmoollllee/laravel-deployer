@@ -182,7 +182,7 @@ whichever command registers last wins, and the stale one is the dangerous half.
 | `files`             | `[]`    | Storage folders for `pull:files` / `push:files`. |
 | `files_pull_delete` | `true`  | Mirror on pull (`rsync --delete`). |
 | `db_pull_include`   | `[]`    | Tables for `pull:db-refresh`. `dep pull:db <tables>` names others ad hoc. |
-| `auth_json`         | `null`  | Local auth.json uploaded by `setup`/`push:auth`. `null` → auto-detect (`./auth.json`, then `~/.composer/auth.json`). |
+| `auth_json`         | `null`  | Local auth.json uploaded by `setup`/`push:auth`. `null` → auto-detect (`auth.json` next to deploy.php, then `~/.composer/auth.json`). |
 | `shell_env`         | `[]`    | Extra environment exported by `dep shell`. |
 | `shell_aliases`     | `['art' => '{{bin/php}} artisan']` | Shorthand commands available in `dep shell`. |
 
@@ -374,8 +374,18 @@ into a directory excluded at the parent level, so a `.gitignore` or `.gitkeep`
 placed inside one can never be committed. If a project has that line, drop it
 when adding the file above.
 
-Sites with their own download task — an October CMS theme pull, say — should
-call `ensure_local_dir()` the same way `pull:files` does.
+Local paths count from the project — the directory `deploy.php` is in — not from
+wherever `dep` was started, so `dep --file=../site/deploy.php` pulls into `../site`.
+Deployer runs `runLocally()` there anyway; `local_path()` puts the downloads, uploads
+and the auth.json lookup in the same place.
+
+Sites with their own download task — an October CMS theme pull, say — should do what
+`pull:files` does: call `ensure_local_dir()` and download into `local_path()`:
+
+```php
+ensure_local_dir('themes/site/');
+download('{{deploy_path}}/themes/site/', local_path('themes/site/'));
+```
 
 ## First-time setup
 
@@ -421,8 +431,9 @@ after('pull:db-full', 'db:localize');
 Step helpers (all in the `Deployer` namespace):
 `deploy_update_code()`, `deploy_vendors()`, `deploy_assets()`, `deploy_clear()`,
 `deploy_migrate()`, `deploy_optimize()`, `deploy_post_optimize()`,
-`deploy_standard()`, `long_running()`, `git_ssh_command()`, `git_env()`,
-`git_pull_command()`, `local_auth_json()`, `log_files_glob()`,
+`deploy_standard()`, `long_running()`, `local_path()`, `ensure_local_dir()`,
+`git_ssh_command()`, `git_env()`, `git_pull_command()`, `local_auth_json()`,
+`log_files_glob()`,
 `latest_log_file()`, `env_value()`, `option_lines()`, `write_raw()`,
 `write_line()`.
 

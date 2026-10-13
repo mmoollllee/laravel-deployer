@@ -14,6 +14,8 @@ use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 use Symfony\Component\Console\Output\OutputInterface;
 
+use function Deployer\Support\deployer_root;
+
 // This file only declares functions (no side effects). The recipes pull it in
 // via require_once, so it loads exactly once per run — a runtime guard would not
 // help here anyway, because top-level function declarations are early-bound at
@@ -196,11 +198,34 @@ function add_console_command(Command $command): void
 }
 
 /**
+ * Anchors a relative local path at the project — the directory deploy.php is in
+ * — instead of wherever `dep` was started.
+ *
+ * Deployer 8 runs runLocally() there, but download() and upload() hand their
+ * paths to rsync as they are, and PHP's own file checks resolve them against the
+ * working directory. The two agree only while `dep` is started next to
+ * deploy.php: `dep --file=…/deploy.php` from anywhere else created the dump
+ * directory in the project and then rsynced into the working directory, where
+ * there was none. Anchoring every local path at the root runLocally() uses keeps
+ * all of them in the project — DEPLOYER_ROOT included, which moves both.
+ *
+ * Absolute paths and `~/…` come back unchanged.
+ */
+function local_path(string $path): string
+{
+    if (str_starts_with($path, '/') || str_starts_with($path, '~')) {
+        return $path;
+    }
+
+    return deployer_root() . '/' . $path;
+}
+
+/**
  * Resolves the local auth.json to upload so the remote `composer install` can
  * authenticate against private repositories (e.g. filament-media-library-pro on
  * satis.ralphjsmit.com). Checks, in order: the {{auth_json}} override, a
  * project-local auth.json, then Composer's global auth.json. Returns null when
- * none exists.
+ * none exists. Relative paths count from the project (see local_path()).
  */
 function local_auth_json(): ?string
 {
@@ -214,6 +239,8 @@ function local_auth_json(): ?string
     ]);
 
     foreach ($candidates as $path) {
+        $path = local_path($path);
+
         if (is_file($path)) {
             return $path;
         }
@@ -238,15 +265,15 @@ function local_auth_json(): ?string
  * Consumers used to paper over this with a committed `.gitkeep`, inconsistently
  * and only where someone had already hit it. Creating the directory here means a
  * pull works on a clone that has never seen one.
+ *
+ * A relative $dir is created in the project (see local_path()), so the download
+ * into it has to go through local_path() too.
  */
 function ensure_local_dir(string $dir): void
 {
-    $dir = rtrim($dir, '/');
-
-    // dirname() of a bare filename; nothing to create.
-    if ($dir === '' || $dir === '.') {
-        return;
-    }
+    // An empty or '.' $dir — dirname() of a bare filename — anchors at the
+    // project root itself, which is there.
+    $dir = local_path(rtrim($dir, '/'));
 
     if (is_dir($dir)) {
         return;

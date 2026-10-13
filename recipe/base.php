@@ -159,7 +159,7 @@ task('pull:files', function () {
         // segment of the destination — so a nested target such as
         // storage/app/captures/<site>/ needs the tree below it to exist first.
         ensure_local_dir($path);
-        download("{{deploy_path}}/{$path}", $path, $options);
+        download("{{deploy_path}}/{$path}", local_path($path), $options);
     }
 
     writeln('<info>✓ Files pulled.</info>');
@@ -170,7 +170,7 @@ task('push:files', function () {
     foreach (get('files') as $folder) {
         writeln("<info>Uploading {$folder}:</info>");
         $path = rtrim($folder, '/').'/';
-        upload($path, "{{deploy_path}}/{$path}");
+        upload(local_path($path), "{{deploy_path}}/{$path}");
     }
 
     writeln('<info>✓ Files pushed.</info>');

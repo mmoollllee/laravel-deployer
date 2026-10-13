@@ -79,3 +79,19 @@ it('refuses when there is no dump to load again', function () {
         ->and($deploy->getErrorOutput().$deploy->getOutput())->toContain('No dump in database/dumps')
         ->and(file_exists($this->log))->toBeFalse();
 });
+
+it('finds the dump in the project when dep is started elsewhere', function () {
+    File::put($this->sandbox.'/database/dumps/2026-10-06_14-25-43.sql.gz', 'new');
+    File::ensureDirectoryExists($this->sandbox.'/elsewhere');
+
+    (new Process(
+        [PHP_BINARY, dirname(__DIR__).'/vendor/bin/dep', 'pull:db-full', '--retry-load', '--file='.$this->sandbox.'/deploy.php', '--no-interaction'],
+        $this->sandbox.'/elsewhere',
+        ['PATH' => $this->sandbox.'/path:'.getenv('PATH')],
+    ))->mustRun();
+
+    expect(file($this->log, FILE_IGNORE_NEW_LINES))->toBe([
+        'php artisan snapshot:load 2026-10-06_14-25-43 --stream --force',
+        'php artisan config:clear',
+    ]);
+});

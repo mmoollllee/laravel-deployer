@@ -61,11 +61,13 @@ beforeEach(function () {
         var_export($log, true),
     ));
 
-    $this->dep = fn (string ...$arguments) => tap(new Process(
+    $this->depIn = fn (string $cwd, string ...$arguments) => tap(new Process(
         [dirname(__DIR__).'/vendor/bin/dep', ...$arguments, '--file='.$this->sandbox.'/local/deploy.php', '--no-interaction'],
-        $this->sandbox.'/local',
+        $cwd,
         ['PATH' => $this->sandbox.'/path:'.getenv('PATH'), 'DO_NOT_SHOW_BANNER' => 'true'],
     ))->run();
+
+    $this->dep = fn (string ...$arguments) => ($this->depIn)($this->sandbox.'/local', ...$arguments);
 
     $this->calls = fn () => is_file($this->log) ? file($this->log, FILE_IGNORE_NEW_LINES) : [];
 });
@@ -90,6 +92,16 @@ it('pulls only the tables it is given', function () {
             'hooked',
         ])
         ->and($this->sandbox.'/local/database/dumps/snapshot.sql')->toBeFile();
+});
+
+it('lands the dump in the project, wherever dep is started', function () {
+    // runLocally() works next to deploy.php, rsync where dep was started: the
+    // dump directory used to be made in one and the download aimed at the other.
+    $dep = ($this->depIn)($this->sandbox, 'pull:db', 'users');
+
+    expect($dep->getExitCode())->toBe(0, $dep->getOutput().$dep->getErrorOutput())
+        ->and($this->sandbox.'/local/database/dumps/snapshot.sql')->toBeFile()
+        ->and($this->sandbox.'/database')->not->toBeDirectory();
 });
 
 it('takes a host selector after the tables', function () {
