@@ -35,7 +35,7 @@ set('current_path', '{{deploy_path}}');
 set('release_or_current_path', '{{deploy_path}}');
 
 // PHP binary for every remote artisan/composer call. Plesk sites override this
-// per host, e.g. ->set('remote_php', '/opt/plesk/php/8.3/bin/php').
+// per host, e.g. ->set('remote_php', '/opt/plesk/php/8.4/bin/php').
 set('remote_php', 'php');
 set('bin/php', fn () => get('remote_php'));
 

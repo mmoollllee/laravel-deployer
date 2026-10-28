@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.8 — 2026-10-28
+
+- **Docs: the Plesk examples pin PHP 8.4.** The README, `examples/deploy.app.php`
+  and the `remote_php` comment in `recipe/base.php` name `/opt/plesk/php/8.4/bin/php`
+  instead of 8.3. Nothing changes for a site: `remote_php` still defaults to `php`,
+  and a site that pins it keeps its own path.
+
 ## 0.5.7 — 2026-10-13
 
 - **`dep pull:db <tables>`** pulls only the tables named on the command line —

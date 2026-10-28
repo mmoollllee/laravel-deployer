@@ -134,7 +134,7 @@ require 'vendor/mmoollllee/laravel-deployer/recipe/app.php';
 host('example.com')
     ->set('remote_user', 'deploy')
     ->set('deploy_path', '~/example.com')
-    ->set('remote_php', '/opt/plesk/php/8.3/bin/php')
+    ->set('remote_php', '/opt/plesk/php/8.4/bin/php')
     ->set('git_ssh_key', '~/.ssh/example_ed25519');
 
 set('db_pull_include', ['migrations', 'users']);
@@ -171,7 +171,7 @@ whichever command registers last wins, and the stale one is the dangerous half.
 
 | Key                 | Default | Purpose |
 |---------------------|---------|---------|
-| `remote_php`        | `php`   | PHP binary for remote artisan/composer. Pin on Plesk, e.g. `/opt/plesk/php/8.3/bin/php`. |
+| `remote_php`        | `php`   | PHP binary for remote artisan/composer. Pin on Plesk, e.g. `/opt/plesk/php/8.4/bin/php`. |
 | `bin/composer`      | auto    | How to invoke Composer remotely. Auto-detected; override with a full path when detection fails. |
 | `git_ssh_key`       | `null`  | Deploy key for `git pull` (IdentitiesOnly=yes). `null` → bare `git pull`. |
 | `deploy_assets`     | `true`  | Run `npm ci && npm run build`. |
@@ -221,8 +221,8 @@ dep shell
 ```
 → example.com ~/example.com
   git  ~/.ssh/example_ed25519 via $GIT_SSH_COMMAND
-  php  /opt/plesk/php/8.3/bin/php first on $PATH (also $DEP_PHP)
-  art  → /opt/plesk/php/8.3/bin/php artisan
+  php  /opt/plesk/php/8.4/bin/php first on $PATH (also $DEP_PHP)
+  art  → /opt/plesk/php/8.4/bin/php artisan
 ```
 
 So a manual `git pull` on the server uses the deploy key without touching

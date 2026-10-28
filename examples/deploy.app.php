@@ -13,7 +13,7 @@ host('example.com')
     ->set('remote_user', '1234')
     ->set('deploy_path', '~/example.com')
     // Plesk: pin the PHP binary the site runs on (optional; defaults to `php`).
-    ->set('remote_php', '/opt/plesk/php/8.3/bin/php')
+    ->set('remote_php', '/opt/plesk/php/8.4/bin/php')
     // Deploy key for `git pull` (optional; omit to use ~/.ssh/config).
     ->set('git_ssh_key', '~/.ssh/example_ed25519');
 
